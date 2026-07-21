@@ -13,7 +13,10 @@ single most important property of this file — do not "fix" a flaky query
 by defaulting it to pass.
 """
 
+import base64
+import hmac
 import json
+import os
 import socket
 import subprocess
 import sys
@@ -22,6 +25,21 @@ import time
 POSTURE_STORE_PATH = "/shared/posture.json"  # shared volume with authz-bridge
 MAX_PATCH_AGE_DAYS = 30
 BLOCKLISTED_PROCESSES = ["nc", "ncat", "mimikatz"]  # example only — extend as needed
+POSTURE_SIGNING_SECRET = os.environ.get("POSTURE_SIGNING_SECRET", "")
+
+
+def sign_entry(data: dict) -> str:
+    """HMAC-SHA256 sign a posture entry.
+
+    Returns base64-encoded signature. If no secret is configured, returns
+    an empty string (unsigned — accepted for backward compatibility in lab).
+    """
+    if not POSTURE_SIGNING_SECRET:
+        return ""
+    payload = json.dumps(data, separators=(",", ":"), sort_keys=True).encode()
+    return base64.b64encode(
+        hmac.digest(POSTURE_SIGNING_SECRET.encode(), payload, "sha256")
+    ).decode()
 
 
 def run_osquery(sql: str):
@@ -112,9 +130,14 @@ def main():
         my_ip = socket.gethostbyname(hostname)
     except socket.gaierror:
         my_ip = hostname if ":" in hostname or "." in hostname else "127.0.0.1"
-    store[my_ip] = {
+    entry = {
         "posture": "healthy" if healthy else "unhealthy",
         **verdict,
+    }
+
+    store[my_ip] = {
+        "data": entry,
+        "sig": sign_entry(entry),
     }
 
     with open(POSTURE_STORE_PATH, "w") as f:

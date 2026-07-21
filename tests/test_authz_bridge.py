@@ -115,6 +115,54 @@ class TestGetPosture:
 
         assert result["posture"] == "unhealthy"
 
+    def test_returns_healthy_for_signed_envelope(self, authz_bridge_module, tmp_path):
+        import hmac as _hmac
+
+        secret = "test-secret"
+        authz_bridge_module.POSTURE_SIGNING_SECRET = secret
+        data = {"posture": "healthy", "device_id": "laptop-1", "checked_at": 9999999}
+        payload = json.dumps(data, separators=(",", ":"), sort_keys=True).encode()
+        sig = base64.b64encode(
+            _hmac.digest(secret.encode(), payload, "sha256")
+        ).decode()
+        store = tmp_path / "posture.json"
+        store.write_text(json.dumps({"10.10.1.50": {"data": data, "sig": sig}}))
+        authz_bridge_module.POSTURE_STORE_PATH = str(store)
+
+        result = authz_bridge_module.get_posture("10.10.1.50")
+
+        assert result["posture"] == "healthy"
+
+    def test_returns_unhealthy_for_forged_signed_envelope(
+        self, authz_bridge_module, tmp_path
+    ):
+        authz_bridge_module.POSTURE_SIGNING_SECRET = "test-secret"
+        data = {"posture": "healthy", "device_id": "laptop-1"}
+        bad_sig = base64.b64encode(b"forged-signature").decode()
+        store = tmp_path / "posture.json"
+        store.write_text(json.dumps({"10.10.1.50": {"data": data, "sig": bad_sig}}))
+        authz_bridge_module.POSTURE_STORE_PATH = str(store)
+
+        result = authz_bridge_module.get_posture("10.10.1.50")
+
+        assert result["posture"] == "unhealthy"
+        assert "invalid posture signature" in result.get("reason", "")
+
+    def test_returns_unhealthy_for_unsigned_when_secret_configured(
+        self, authz_bridge_module, tmp_path
+    ):
+        authz_bridge_module.POSTURE_SIGNING_SECRET = "test-secret"
+        store = tmp_path / "posture.json"
+        store.write_text(
+            json.dumps({"10.10.1.50": {"posture": "healthy", "device_id": "laptop-1"}})
+        )
+        authz_bridge_module.POSTURE_STORE_PATH = str(store)
+
+        result = authz_bridge_module.get_posture("10.10.1.50")
+
+        assert result["posture"] == "unhealthy"
+        assert "invalid posture signature" in result.get("reason", "")
+
 
 # ---------------------------------------------------------------------------
 # check_identity tests (mocked oauth2-proxy)

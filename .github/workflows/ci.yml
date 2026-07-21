@@ -11,6 +11,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Verify GHCR image references match repo owner
+        run: |
+          EXPECTED="ghcr.io/${{ github.repository_owner }}"
+          MISMATCHES=0
+          while IFS= read -r -d '' f; do
+            if grep -Pn 'ghcr\.io/[^/]+/ztlab-' "$f" | grep -vP "ghcr\.io/\Q${{ github.repository_owner }}\E/ztlab-"; then
+              echo "::error file=$f::Found ghcr.io reference that doesn't match repo owner '${{ github.repository_owner }}'"
+              MISMATCHES=$((MISMATCHES + 1))
+            fi
+          done < <(git grep -l 'ghcr.io' -- ':!idp/' 2>/dev/null || true)
+          if [ "$MISMATCHES" -gt 0 ]; then
+            echo "FAIL: $MISMATCHES ghcr.io reference(s) don't match repo owner '${{ github.repository_owner }}'"
+            exit 1
+          fi
+          echo "All GHCR references match repo owner '${{ github.repository_owner }}'"
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"

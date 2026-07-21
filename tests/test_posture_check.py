@@ -10,9 +10,7 @@ def posture_module():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1]
-    spec = spec_from_file_location(
-        "posture_check", root / "scripts/posture_check.py"
-    )
+    spec = spec_from_file_location("posture_check", root / "scripts/posture_check.py")
     module = module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -64,7 +62,9 @@ class TestRunOsquery:
 
 class TestCheckDiskEncryption:
     def test_healthy_when_encrypted(self, posture_module):
-        with patch.object(posture_module, "run_osquery", return_value=[{"encrypted": 1}]):
+        with patch.object(
+            posture_module, "run_osquery", return_value=[{"encrypted": 1}]
+        ):
             assert posture_module.check_disk_encryption() is True
 
     def test_unhealthy_when_not_encrypted(self, posture_module):
@@ -78,21 +78,25 @@ class TestCheckDiskEncryption:
 
 class TestCheckBlocklistedProcesses:
     def test_clean_when_no_hits(self, posture_module):
-        with patch.object(posture_module, "run_osquery", return_value=[
-            {"name": "sshd"}, {"name": "python3"}
-        ]):
+        with patch.object(
+            posture_module,
+            "run_osquery",
+            return_value=[{"name": "sshd"}, {"name": "python3"}],
+        ):
             assert posture_module.check_blocklisted_processes() is True
 
     def test_unhealthy_when_nc_running(self, posture_module):
-        with patch.object(posture_module, "run_osquery", return_value=[
-            {"name": "sshd"}, {"name": "nc"}
-        ]):
+        with patch.object(
+            posture_module,
+            "run_osquery",
+            return_value=[{"name": "sshd"}, {"name": "nc"}],
+        ):
             assert posture_module.check_blocklisted_processes() is False
 
     def test_unhealthy_when_mimikatz_running(self, posture_module):
-        with patch.object(posture_module, "run_osquery", return_value=[
-            {"name": "mimikatz"}
-        ]):
+        with patch.object(
+            posture_module, "run_osquery", return_value=[{"name": "mimikatz"}]
+        ):
             assert posture_module.check_blocklisted_processes() is False
 
     def test_unhealthy_on_osquery_failure(self, posture_module):
@@ -104,43 +108,61 @@ class TestMain:
     def test_writes_healthy_verdict(self, posture_module, tmp_path):
         posture_file = tmp_path / "posture.json"
 
-        with patch.object(posture_module, "POSTURE_STORE_PATH", str(posture_file)), \
-             patch.object(posture_module, "check_disk_encryption", return_value=True), \
-             patch.object(posture_module, "check_patch_age", return_value=True), \
-             patch.object(posture_module, "check_blocklisted_processes", return_value=True), \
-             patch("socket.gethostname", return_value="test-host"), \
-             patch("socket.gethostbyname", return_value="10.10.1.50"):
+        with (
+            patch.object(posture_module, "POSTURE_SIGNING_SECRET", "test-secret"),
+            patch.object(posture_module, "POSTURE_STORE_PATH", str(posture_file)),
+            patch.object(posture_module, "check_disk_encryption", return_value=True),
+            patch.object(posture_module, "check_patch_age", return_value=True),
+            patch.object(
+                posture_module, "check_blocklisted_processes", return_value=True
+            ),
+            patch("socket.gethostname", return_value="test-host"),
+            patch("socket.gethostbyname", return_value="10.10.1.50"),
+        ):
             posture_module.main()
 
         store = json.loads(posture_file.read_text())
-        assert store["10.10.1.50"]["posture"] == "healthy"
-        assert store["10.10.1.50"]["healthy"] is True
+        envelope = store["10.10.1.50"]
+        assert envelope["data"]["posture"] == "healthy"
+        assert envelope["data"]["healthy"] is True
+        assert envelope["sig"] != ""
 
     def test_writes_unhealthy_when_any_check_fails(self, posture_module, tmp_path):
         posture_file = tmp_path / "posture.json"
 
-        with patch.object(posture_module, "POSTURE_STORE_PATH", str(posture_file)), \
-             patch.object(posture_module, "check_disk_encryption", return_value=False), \
-             patch.object(posture_module, "check_patch_age", return_value=True), \
-             patch.object(posture_module, "check_blocklisted_processes", return_value=True), \
-             patch("socket.gethostname", return_value="test-host"), \
-             patch("socket.gethostbyname", return_value="10.10.1.50"):
+        with (
+            patch.object(posture_module, "POSTURE_SIGNING_SECRET", "test-secret"),
+            patch.object(posture_module, "POSTURE_STORE_PATH", str(posture_file)),
+            patch.object(posture_module, "check_disk_encryption", return_value=False),
+            patch.object(posture_module, "check_patch_age", return_value=True),
+            patch.object(
+                posture_module, "check_blocklisted_processes", return_value=True
+            ),
+            patch("socket.gethostname", return_value="test-host"),
+            patch("socket.gethostbyname", return_value="10.10.1.50"),
+        ):
             posture_module.main()
 
         store = json.loads(posture_file.read_text())
-        assert store["10.10.1.50"]["posture"] == "unhealthy"
-        assert store["10.10.1.50"]["healthy"] is False
+        envelope = store["10.10.1.50"]
+        assert envelope["data"]["posture"] == "unhealthy"
+        assert envelope["data"]["healthy"] is False
+        assert envelope["sig"] != ""
 
     def test_appends_to_existing_store(self, posture_module, tmp_path):
         posture_file = tmp_path / "posture.json"
         posture_file.write_text(json.dumps({"10.10.1.99": {"posture": "healthy"}}))
 
-        with patch.object(posture_module, "POSTURE_STORE_PATH", str(posture_file)), \
-             patch.object(posture_module, "check_disk_encryption", return_value=True), \
-             patch.object(posture_module, "check_patch_age", return_value=True), \
-             patch.object(posture_module, "check_blocklisted_processes", return_value=True), \
-             patch("socket.gethostname", return_value="test-host"), \
-             patch("socket.gethostbyname", return_value="10.10.1.50"):
+        with (
+            patch.object(posture_module, "POSTURE_STORE_PATH", str(posture_file)),
+            patch.object(posture_module, "check_disk_encryption", return_value=True),
+            patch.object(posture_module, "check_patch_age", return_value=True),
+            patch.object(
+                posture_module, "check_blocklisted_processes", return_value=True
+            ),
+            patch("socket.gethostname", return_value="test-host"),
+            patch("socket.gethostbyname", return_value="10.10.1.50"),
+        ):
             posture_module.main()
 
         store = json.loads(posture_file.read_text())

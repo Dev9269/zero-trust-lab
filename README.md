@@ -100,12 +100,13 @@ Each phase has a detailed checkpoint document with pre-reqs, failure modes, roll
 
 ## Lab Shortcuts (Not Production-Ready)
 
-- Self-signed TLS certs
-- Posture data in a JSON file keyed by IP (no integrity, no authentication)
-- No mTLS between services
-- oauth2-proxy header names are version-dependent — must verify against installed version
-- No persistent log storage (Docker default loses on restart)
-- Mock re-auth (auth_time from OIDC claim, not actual WebAuthn re-prompt)
+- **Self-signed TLS certs** — OK for lab, do NOT use in production. Replace with Let's Encrypt or an internal CA.
+- **Posture signing uses a shared symmetric key** — the HMAC secret is the same for all devices. A per-device key pair (asymmetric) would be production-grade. The current fix closes the "anyone can write posture.json" gap but a key compromise breaks all devices.
+- **No mTLS between services** — internal service auth is done by network segmentation, not by mutual TLS. A process that reaches the compose network can talk to any service without authentication.
+- **Posture store is still a JSON file** — not a database. No query isolation, no atomic writes, no access audit. The HMAC signing prevents forgery but doesn't fix structural weaknesses.
+- **oauth2-proxy header names are version-dependent** — must verify against installed version before upgrading.
+- **No persistent log storage** — Loki data lives in a Docker volume; `docker compose down -v` loses all history.
+- **Mock re-auth** — `auth_time` comes from the OIDC claim, not from an actual WebAuthn re-prompt. The step-up check enforces policy but the UX flow is simulated.
 
 ## Testing
 
@@ -161,13 +162,15 @@ Pre-built images are published to GitHub Container Registry on each release:
 
 ```bash
 # Pull images
-docker pull ghcr.io/aditya226-sharma/ztlab-demo-app:latest
-docker pull ghcr.io/aditya226-sharma/ztlab-authz-bridge:latest
-docker pull ghcr.io/aditya226-sharma/ztlab-mock-oidc:latest
+docker pull ghcr.io/dev9269/ztlab-demo-app:latest
+docker pull ghcr.io/dev9269/ztlab-authz-bridge:latest
+docker pull ghcr.io/dev9269/ztlab-mock-oidc:latest
 
 # Or use the production override
 make prod-up
 ```
+
+> **Forking?** The docker-publish.yml uses `${{ github.repository_owner }}` so images publish under your namespace automatically. Update the `ghcr.io/dev9269/` paths above and in `gateway/docker-compose.prod.yml` to match your own GHCR namespace.
 
 ### Auto-deploy to server
 

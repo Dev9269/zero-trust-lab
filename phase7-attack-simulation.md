@@ -127,11 +127,15 @@ If you can't reach the posture file from the attacker, test from the gateway its
 # From gateway — write unhealthy, confirm deny; write healthy, confirm allow
 ```
 
-### CRITICAL NOTE
-The posture store is a bind-mounted JSON file with no authentication or integrity. This is a **deliberate lab shortcut** flagged in all phase docs. A real deployment needs:
-1. Signed posture assertions (JWT with device attestation)
-2. A proper store (Redis, DB) instead of a file
-3. Device identity that can't be spoofed by IP
+### REMEDIATION STATUS (2026-07-21)
+The posture store now supports HMAC-SHA256 signed assertions. The `posture_check.py` agent signs each entry with a shared secret (`POSTURE_SIGNING_SECRET`), and authz-bridge verifies the signature before accepting the data. Unsigned entries or entries with invalid signatures are rejected as "unhealthy" (fail-closed).
+
+**What this closes:** Attacker 3 (spoofed posture) is now blocked even if the attacker reaches trusted-net — without the signing secret, any forged entry is rejected.
+
+**Remaining gaps (documented lab shortcuts):**
+1. The signing secret is a shared symmetric key, not per-device asymmetric keys — a compromise of one cuts all
+2. The store is still a JSON file (not Redis/DB) — replay risk if old signed entries are copied
+3. Device identity is still IP-based, not certificate-bound
 
 ---
 

@@ -21,6 +21,7 @@ Run with: gunicorn -w 2 -b 0.0.0.0:9191 app:app
 """
 
 import base64
+import hmac
 import ipaddress
 import json
 import logging
@@ -48,6 +49,7 @@ AUDIT_LOG_PATH: str = os.environ.get("AUDIT_LOG_PATH", "/data/audit.jsonl")
 ADMIN_TOKEN: str = os.environ.get("ADMIN_TOKEN", "ztlab-admin-token")
 MAX_POSTURE_AGE_SECONDS: int = int(os.environ.get("MAX_POSTURE_AGE_SECONDS", "300"))
 RISK_THRESHOLD: int = int(os.environ.get("RISK_THRESHOLD", "70"))
+POSTURE_SIGNING_SECRET: str = os.environ.get("POSTURE_SIGNING_SECRET", "")
 
 
 def _write_audit_log(event: dict) -> None:
@@ -60,6 +62,23 @@ def _write_audit_log(event: dict) -> None:
         log.error("Failed to write audit log: %s", e)
 
 
+def _verify_posture_sig(data: dict, sig_b64: str) -> bool:
+    """Verify HMAC-SHA256 signature on a posture entry.
+    Returns True if signature is valid or no secret is configured.
+    """
+    if not POSTURE_SIGNING_SECRET:
+        return True
+    if not sig_b64:
+        return False
+    payload = json.dumps(data, separators=(",", ":"), sort_keys=True).encode()
+    expected = hmac.digest(POSTURE_SIGNING_SECRET.encode(), payload, "sha256")
+    try:
+        actual = base64.b64decode(sig_b64)
+    except Exception:
+        return False
+    return hmac.compare_digest(expected, actual)
+
+
 def get_posture(source_ip: str) -> dict[str, Any]:
     try:
         with open(POSTURE_STORE_PATH, "r") as f:
@@ -67,10 +86,15 @@ def get_posture(source_ip: str) -> dict[str, Any]:
     except (FileNotFoundError, json.JSONDecodeError):
         log.warning("posture store missing or unreadable — failing closed")
         return {"posture": "unhealthy", "reason": "no posture data"}
-    entry = store.get(source_ip)
-    if not entry:
+    envelope = store.get(source_ip)
+    if not envelope:
         return {"posture": "unhealthy", "reason": "no posture record for source"}
-    return entry
+    data = envelope.get("data", envelope) if isinstance(envelope, dict) else envelope
+    sig = envelope.get("sig", "") if isinstance(envelope, dict) else ""
+    if not _verify_posture_sig(data, sig):
+        log.warning("posture signature invalid for %s — failing closed", source_ip)
+        return {"posture": "unhealthy", "reason": "invalid posture signature"}
+    return data
 
 
 def _decode_id_token(header_value: str) -> dict[str, Any]:
@@ -616,14 +640,16 @@ def _load_posture_for_dashboard() -> dict[str, Any]:
 
     now = int(time.time())
     for ip, entry in store.items():
-        age = now - entry.get("checked_at", entry.get("last_seen", 0))
+        data = entry.get("data", entry) if isinstance(entry, dict) else entry
+        age = now - data.get("checked_at", data.get("last_seen", 0))
         if age < 60:
-            entry["age_str"] = f"{age}s ago"
+            data["age_str"] = f"{age}s ago"
         elif age < 3600:
-            entry["age_str"] = f"{age // 60}m ago"
+            data["age_str"] = f"{age // 60}m ago"
         else:
-            entry["age_str"] = f"{age // 3600}h ago"
-        entry.setdefault("signals", {})
+            data["age_str"] = f"{age // 3600}h ago"
+        data.setdefault("signals", {})
+        store[ip] = data
     return store
 
 
