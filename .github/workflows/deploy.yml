@@ -14,6 +14,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Deploy via SSH
+        id: deploy
         uses: appleboy/ssh-action@v1
         continue-on-error: true
         with:
@@ -37,6 +38,25 @@ jobs:
             docker compose pull || true
             docker compose build
             docker compose up -d --remove-orphans
+
+            echo "--- Smoke test: checking gateway health endpoint ---"
+            for i in 1 2 3 4 5; do
+              STATUS=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 5 https://localhost/healthz 2>/dev/null || echo "000")
+              if [ "$STATUS" = "200" ]; then
+                echo "Smoke test PASSED (HTTP $STATUS)"
+                break
+              fi
+              echo "Retry $i/5 — gateway returned $STATUS, waiting..."
+              sleep 3
+            done
+            if [ "$STATUS" != "200" ]; then
+              echo "Smoke test FAILED after 5 retries"
+              docker compose logs --tail=20
+              exit 1
+            fi
+
+            echo "--- Smoke test: POSTURE_SIGNING_SECRET is set ---"
+            docker compose exec -T authz-bridge sh -c 'echo "POSTURE_SIGNING_SECRET=${POSTURE_SIGNING_SECRET:+set}"'
 
             echo "--- Cleaning up dangling images ---"
             docker image prune -f

@@ -1,0 +1,15 @@
+# Dev override — exposes services that must NOT be reachable from
+# untrusted-net in production. Use with:
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml up -d
+#
+# In production (or for phase7 attack tests), omit this file so OPA :8181
+# and Loki :3100 are only reachable inside the compose network.
+
+services:
+  opa:
+    ports:
+      - "8181:8181"  # dev only — allows direct curl testing of OPA policy
+
+  loki:
+    ports:
+      - "3100:3100"  # dev only — allows direct log queries

@@ -171,6 +171,21 @@ def validate() -> Response:
     identity: dict[str, Any] = check_identity(request.headers)
     posture: dict[str, Any] = get_posture(source_ip)
 
+    # Derive data classification from path for ABAC enforcement in OPA
+    path_lower = original_uri.lower()
+    if any(path_lower.startswith(p) for p in ["/admin", "/api/peers"]):
+        data_classification = "critical"
+    elif path_lower.startswith("/sensitive"):
+        data_classification = "restricted"
+    elif path_lower.startswith("/api/data"):
+        data_classification = "restricted"
+    else:
+        data_classification = "public"
+
+    # Derive user role — admin group mapping is the hardcoded authz rule;
+    # non-admin authenticated users are "user" by default.
+    user_role = "admin" if identity.get("is_admin") else "user"
+
     opa_input: dict[str, Any] = {
         "input": {
             "user": {
@@ -179,10 +194,14 @@ def validate() -> Response:
                 "auth_time": identity.get("auth_time", 0),
                 "email": identity.get("email", ""),
                 "is_admin": identity.get("is_admin", False),
+                "role": user_role,
             },
             "device": {
                 "ip": source_ip,
                 "posture": posture.get("posture", "unhealthy"),
+            },
+            "data": {
+                "classification": data_classification,
             },
             "path": original_uri,
         }

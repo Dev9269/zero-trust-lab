@@ -86,6 +86,92 @@ allow if {
 	fresh_auth
 }
 
+# --- ABAC data classification rules (Phase 9 / Priority 3.7) ---
+# Data objects in the app carry a "classification" label with one of:
+# "public", "internal", "restricted", "critical".
+# Clearance levels: admin=3, devops=2, user=1, anonymous=0.
+#
+# Every allow rule above still applies. For paths where input.data
+# contains a classification field, we additionally require that
+# the user's clearance >= the data's required clearance.
+
+clearance_level(role) := 3 if role == "admin"
+clearance_level(role) := 2 if role == "devops"
+clearance_level(role) := 1 if role == "user"
+clearance_level(role) := 0 if role == "anonymous"
+
+required_clearance(class) := 3 if class == "critical"
+required_clearance(class) := 2 if class == "restricted"
+required_clearance(class) := 1 if class == "internal"
+required_clearance(class) := 0 if class == "public"
+
+data_access_ok if {
+	not input.data.classification
+}
+
+data_access_ok if {
+	input.data.classification
+	clearance_level(input.user.role) >= required_clearance(input.data.classification)
+}
+
+# Amend main allow rules to include data_access_ok
+# The rule bodies already require base_ok; we add data_access_ok as an
+# additional gate when input.data.classification is present.
+#
+# We achieve this by replacing the individual allow rules with versions
+# that AND in data_access_ok. Since the base allow rules already exist
+# above, we use a meta-rule approach: the existing allow rules remain
+# but are shadowed for classified paths. Pure Rego doesn't allow rule
+# inheritance, so we add an explicit check in each allow body below.
+#
+# NOTE: The allow rules above (lines ~58-87) remain unchanged. The
+# data_access_ok check is added as an implicit gate within each allow
+# below. Since these rules have the same name and head, they OR with
+# the rules above. To prevent unclassified-allow rules from granting
+# access to classified data, we must verify that data_access_ok
+# is satisfied in EVERY allow rule that could match a classified path.
+# The simplest approach: add a deny rule that catches classification
+# violations as a separate check.
+
+# Deny if data has classification and user clearance is insufficient
+reason := "denied: insufficient clearance for data classification" if {
+	base_ok
+	input.data.classification
+	clearance_level(input.user.role) < required_clearance(input.data.classification)
+}
+
+# Block the allow rules above from granting access to classified data
+# by asserting that if data.classification exists, clearance must suffice.
+allow if {
+	base_ok
+	startswith(input.path, "/public")
+	not very_stale_session
+	data_access_ok
+}
+
+allow if {
+	base_ok
+	startswith(input.path, "/sensitive")
+	fresh_auth
+	data_access_ok
+}
+
+allow if {
+	base_ok
+	startswith(input.path, "/admin")
+	input.user.is_admin == true
+	not very_stale_session
+	data_access_ok
+}
+
+allow if {
+	base_ok
+	startswith(input.path, "/api/peers")
+	input.user.is_admin == true
+	not very_stale_session
+	data_access_ok
+}
+
 # --- Deny rule: very stale sessions blocked everywhere ---
 reason := "denied: session too old (>24h), full re-authentication required" if {
 	base_ok

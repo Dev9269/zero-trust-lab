@@ -100,13 +100,17 @@ Each phase has a detailed checkpoint document with pre-reqs, failure modes, roll
 
 ## Lab Shortcuts (Not Production-Ready)
 
-- **Self-signed TLS certs** — OK for lab, do NOT use in production. Replace with Let's Encrypt or an internal CA.
 - **Posture signing uses a shared symmetric key** — the HMAC secret is the same for all devices. A per-device key pair (asymmetric) would be production-grade. The current fix closes the "anyone can write posture.json" gap but a key compromise breaks all devices.
-- **No mTLS between services** — internal service auth is done by network segmentation, not by mutual TLS. A process that reaches the compose network can talk to any service without authentication.
 - **Posture store is still a JSON file** — not a database. No query isolation, no atomic writes, no access audit. The HMAC signing prevents forgery but doesn't fix structural weaknesses.
+- **No mTLS between services** — internal service auth is done by network segmentation, not by mutual TLS. A process that reaches the compose network can talk to any service without authentication. See `scripts/setup-mtls.sh` for a self-managed local CA approach.
+- **Self-signed TLS certs** — OK for lab, do NOT use in production. Replace with Let's Encrypt or an internal CA with automated renewal.
+- **No persistent log storage** — Loki data lives in a Docker volume; `docker compose down -v` loses all history. Production needs S3/GCS backend or Loki's `filesystem` config with a host bind mount.
+- **OPA :8181 is not exposed by default** — use `docker compose -f docker-compose.yml -f docker-compose.override.yml up` for direct OPA curl testing during development.
 - **oauth2-proxy header names are version-dependent** — must verify against installed version before upgrading.
-- **No persistent log storage** — Loki data lives in a Docker volume; `docker compose down -v` loses all history.
 - **Mock re-auth** — `auth_time` comes from the OIDC claim, not from an actual WebAuthn re-prompt. The step-up check enforces policy but the UX flow is simulated.
+- **No TPM 2.0 hardware attestation** — device posture is purely software-reported via osquery. A compromised client VM can report healthy posture even when compromised. Production would verify measured boot and disk encryption via TPM 2.0 PCR quotes (see [phase8-maturity-scorecard.md](phase8-maturity-scorecard.md)).
+- **No SPIFFE/SPIRE workload identity** — services authenticate each other by network presence, not cryptographic identity. Production would run a SPIRE server with per-service agent attestors and short-lived X.509 SVIDs.
+- **No rate limiting or input validation on Flask** — the demo app trusts the upstream PEP, but a misconfigured nginx could allow direct requests. Production would add rate limiting at the nginx layer and input validation on every route.
 
 ## Testing
 

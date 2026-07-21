@@ -158,4 +158,6 @@ curl -vk -o /dev/null -w "%{http_code}\n" -D - \
 1. **Posture store is a bind-mounted JSON file** — keyed by source IP, trivially spoofable. Production needs Redis/database keyed by real device identity.
 2. **Self-signed TLS cert** — fine for lab, not for anything real.
 3. **oauth2-proxy `--set-authorization-header` flag name is version-consistent** (it's existed since 7.x) but still verify it works in your installed version before trusting the config.
-4. **OPA port 8181 exposed** — open for direct curl testing in the lab. Production would remove this exposure.
+4. **OPA port 8181 exposed** — open for direct curl testing in the lab. Production would remove this exposure. A `docker-compose.override.yml` is provided — use `docker compose -f docker-compose.yml -f docker-compose.override.yml up` to expose the port during development; omit it in production.
+5. **No mTLS between services** — internal service auth is done by network segmentation, not mutual TLS. See `scripts/setup-mtls.sh` for a self-managed local CA approach. This is a documented lab shortcut — production would use SPIFFE/SPIRE for workload identity.
+6. **Self-signed TLS cert** — fine for lab, not for anything real. Production needs Let's Encrypt or an internal CA with automated renewal.
