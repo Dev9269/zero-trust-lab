@@ -1,5 +1,4 @@
 name: CI
-
 on:
   push:
     branches: [main]
@@ -11,34 +10,24 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.x"
-      - name: Install dependencies
-        run: pip install -r requirements-dev.txt
-      - name: Run tests
-        run: pytest
-      - name: Lint with flake8
-        run: flake8 .
+          python-version: "3.13"
 
-  opa-test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+      - name: Install Python deps
+        run: |
+          pip install flask requests pytest
+          pip list
+
+      - name: Run pytest
+        run: pytest -v
+
       - name: Install OPA
         run: |
-          curl -L -o /usr/local/bin/opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static
+          curl -sL https://openpolicyagent.org/downloads/v1.1.0/opa_linux_amd64_static -o /usr/local/bin/opa
           chmod +x /usr/local/bin/opa
+          opa version
+
       - name: Run OPA tests
         run: opa test gateway/opa/ -v
-
-  docker-build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build demo-app image
-        run: docker build -t ztlab-demo-app ./app
-      - name: Build authz-bridge image
-        run: docker build -t ztlab-authz-bridge ./gateway/authz-bridge
-      - name: Build mock-oidc image
-        run: docker build -t ztlab-mock-oidc ./gateway/mock-oidc

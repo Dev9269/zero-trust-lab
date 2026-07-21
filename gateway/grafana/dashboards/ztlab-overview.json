@@ -113,6 +113,61 @@
         "enableLogDetails": true,
         "sortOrder": "Descending"
       }
+    },
+    {
+      "type": "row",
+      "title": "Security Remediation (Parts 1-4)",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+      "collapsed": false
+    },
+    {
+      "type": "piechart",
+      "title": "Admin Access Deny Reasons",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "loki", "uid": "" },
+      "targets": [
+        {
+          "expr": "count by (reason) ({job=\"authz-bridge\"} | json | reason=~\"denied: admin.*|denied: peer.*\")",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Nginx Safe Access (referrer/user-agent stripped)",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 24 },
+      "datasource": { "type": "loki", "uid": "" },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({job=\"nginx\"}[5m]))",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Risk Score Threshold Breaches",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 24 },
+      "datasource": { "type": "loki", "uid": "" },
+      "targets": [
+        {
+          "expr": "count_over_time({job=\"authz-bridge\"} | json | requires_step_up=\"true\" [1h])",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "orange", "mode": "fixed" }
+        },
+        "overrides": []
+      }
     }
   ],
   "schemaVersion": 39,

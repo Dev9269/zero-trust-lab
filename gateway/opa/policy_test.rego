@@ -163,3 +163,57 @@ test_allow_fresh_session_on_public if {
 test_deny_very_stale_on_sensitive if {
 	not allow with input as {"user": {"authenticated": true, "mfa_verified": true, "auth_time": (time.now_ns() / 1000000000) - 93600, "email": "a@b.c"}, "device": {"ip": "10.10.1.50", "posture": "healthy"}, "path": "/sensitive"}
 }
+
+# ===========================================================================
+# RBAC — ADMIN PATH TESTS (Part 1.1 Security Remediation)
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# ALLOW: admin user on /admin path
+# ---------------------------------------------------------------------------
+test_allow_admin_path_with_admin_role if {
+	allow with input as {"user": {"authenticated": true, "mfa_verified": true, "auth_time": 0, "email": "admin@ztlab.local", "is_admin": true}, "device": {"ip": "10.10.1.50", "posture": "healthy"}, "path": "/admin"}
+}
+
+# ---------------------------------------------------------------------------
+# DENY: non-admin user on /admin path
+# ---------------------------------------------------------------------------
+test_deny_admin_path_without_admin_role if {
+	not allow with input as {"user": {"authenticated": true, "mfa_verified": true, "auth_time": 0, "email": "user@ztlab.local", "is_admin": false}, "device": {"ip": "10.10.1.50", "posture": "healthy"}, "path": "/admin"}
+}
+
+test_deny_admin_path_without_admin_role_reason if {
+	reason == "denied: admin access requires admin role" with input as {"user": {"authenticated": true, "mfa_verified": true, "auth_time": 0, "email": "user@ztlab.local", "is_admin": false}, "device": {"ip": "10.10.1.50", "posture": "healthy"}, "path": "/admin"}
+}
+
+# ---------------------------------------------------------------------------
+# DENY: non-admin user on /api/peers path
+# ---------------------------------------------------------------------------
+test_deny_peers_path_without_admin_role if {
+	not allow with input as {"user": {"authenticated": true, "mfa_verified": true, "auth_time": 0, "email": "user@ztlab.local", "is_admin": false}, "device": {"ip": "10.10.1.50", "posture": "healthy"}, "path": "/api/peers"}
+}
+
+test_deny_peers_path_without_admin_role_reason if {
+	reason == "denied: peer API requires admin role" with input as {"user": {"authenticated": true, "mfa_verified": true, "auth_time": 0, "email": "user@ztlab.local", "is_admin": false}, "device": {"ip": "10.10.1.50", "posture": "healthy"}, "path": "/api/peers"}
+}
+
+# ---------------------------------------------------------------------------
+# ALLOW: admin user on /api/peers path
+# ---------------------------------------------------------------------------
+test_allow_peers_path_with_admin_role if {
+	allow with input as {"user": {"authenticated": true, "mfa_verified": true, "auth_time": 0, "email": "admin@ztlab.local", "is_admin": true}, "device": {"ip": "10.10.1.50", "posture": "healthy"}, "path": "/api/peers"}
+}
+
+# ---------------------------------------------------------------------------
+# DENY: admin path with is_admin missing in input (fails closed)
+# ---------------------------------------------------------------------------
+test_deny_admin_path_is_admin_missing if {
+	not allow with input as {"user": {"authenticated": true, "mfa_verified": true, "auth_time": 0, "email": "admin@ztlab.local"}, "device": {"ip": "10.10.1.50", "posture": "healthy"}, "path": "/admin"}
+}
+
+# ---------------------------------------------------------------------------
+# ALLOW: non-admin user still allowed on /public
+# ---------------------------------------------------------------------------
+test_allow_non_admin_on_public if {
+	allow with input as {"user": {"authenticated": true, "mfa_verified": true, "auth_time": 0, "email": "user@ztlab.local", "is_admin": false}, "device": {"ip": "10.10.1.50", "posture": "healthy"}, "path": "/public"}
+}
