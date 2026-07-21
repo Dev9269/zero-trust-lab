@@ -10,9 +10,7 @@ def mock_oidc_client():
     from pathlib import Path
 
     root = Path(__file__).resolve().parents[1]
-    spec = spec_from_file_location(
-        "mock_oidc", root / "gateway/mock-oidc/app.py"
-    )
+    spec = spec_from_file_location("mock_oidc", root / "gateway/mock-oidc/app.py")
     module = module_from_spec(spec)
     spec.loader.exec_module(module)
     module.app.config["TESTING"] = True
@@ -53,10 +51,13 @@ class TestJWKS:
 class TestTokenEndpoint:
     def test_authorization_code_grant(self, mock_oidc_client):
         client, _ = mock_oidc_client
-        resp = client.post("/oauth/token", data={
-            "grant_type": "authorization_code",
-            "code": "test-code",
-        })
+        resp = client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "code": "test-code",
+            },
+        )
 
         assert resp.status_code == 200
         data = resp.get_json()
@@ -67,18 +68,24 @@ class TestTokenEndpoint:
 
     def test_unsupported_grant_type(self, mock_oidc_client):
         client, _ = mock_oidc_client
-        resp = client.post("/oauth/token", data={
-            "grant_type": "password",
-        })
+        resp = client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "password",
+            },
+        )
 
         assert resp.status_code == 400
         assert resp.get_json()["error"] == "unsupported_grant_type"
 
     def test_tokens_are_valid_jwt_format(self, mock_oidc_client):
         client, _ = mock_oidc_client
-        data = client.post("/oauth/token", data={
-            "grant_type": "authorization_code",
-        }).get_json()
+        data = client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+            },
+        ).get_json()
 
         for token_key in ("access_token", "id_token"):
             parts = data[token_key].split(".")
@@ -91,17 +98,41 @@ class TestTokenEndpoint:
             assert payload["iss"] == "http://mock-oidc:9000"
             assert payload["aud"] == "ztlab-client"
 
+    def test_id_token_has_groups(self, mock_oidc_client):
+        client, _ = mock_oidc_client
+        data = client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+            },
+        ).get_json()
+
+        parts = data["id_token"].split(".")
+        payload_b64 = parts[1]
+        padded = payload_b64 + "=" * ((4 - len(payload_b64) % 4) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded))
+
+        assert "groups" in payload
+        assert "admins" in payload["groups"]
+        assert "engineers" in payload["groups"]
+
 
 class TestUserInfo:
     def test_valid_token_returns_userinfo(self, mock_oidc_client):
         client, _ = mock_oidc_client
-        token_data = client.post("/oauth/token", data={
-            "grant_type": "authorization_code",
-        }).get_json()
+        token_data = client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+            },
+        ).get_json()
 
-        resp = client.get("/userinfo", headers={
-            "Authorization": f"Bearer {token_data['access_token']}",
-        })
+        resp = client.get(
+            "/userinfo",
+            headers={
+                "Authorization": f"Bearer {token_data['access_token']}",
+            },
+        )
 
         assert resp.status_code == 200
         data = resp.get_json()
@@ -117,8 +148,11 @@ class TestUserInfo:
 
     def test_non_bearer_token_returns_401(self, mock_oidc_client):
         client, _ = mock_oidc_client
-        resp = client.get("/userinfo", headers={
-            "Authorization": "Basic abc123",
-        })
+        resp = client.get(
+            "/userinfo",
+            headers={
+                "Authorization": "Basic abc123",
+            },
+        )
 
         assert resp.status_code == 401

@@ -1,3 +1,4 @@
+import base64
 import json
 from unittest.mock import patch, MagicMock
 
@@ -19,14 +20,18 @@ class TestAdminDashboard:
 
     def test_admin_dashboard_renders(self, client, authz_bridge_module, tmp_path):
         store = tmp_path / "posture.json"
-        store.write_text(json.dumps({
-            "10.10.1.50": {
-                "posture": "healthy",
-                "device_id": "laptop-alice",
-                "checked_at": 1784569000,
-                "signals": self._mock_signals(),
-            }
-        }))
+        store.write_text(
+            json.dumps(
+                {
+                    "10.10.1.50": {
+                        "posture": "healthy",
+                        "device_id": "laptop-alice",
+                        "checked_at": 1784569000,
+                        "signals": self._mock_signals(),
+                    }
+                }
+            )
+        )
         authz_bridge_module.POSTURE_STORE_PATH = str(store)
 
         with patch.object(authz_bridge_module, "_get_wg_peers", return_value={}):
@@ -37,16 +42,22 @@ class TestAdminDashboard:
         assert b"laptop-alice" in resp.data
         assert b"healthy" in resp.data
 
-    def test_admin_dashboard_shows_unhealthy_devices(self, client, authz_bridge_module, tmp_path):
+    def test_admin_dashboard_shows_unhealthy_devices(
+        self, client, authz_bridge_module, tmp_path
+    ):
         store = tmp_path / "posture.json"
-        store.write_text(json.dumps({
-            "10.10.1.50": {
-                "posture": "unhealthy",
-                "device_id": "laptop-bob",
-                "checked_at": 1784569000,
-                "signals": self._mock_signals(disk=False),
-            }
-        }))
+        store.write_text(
+            json.dumps(
+                {
+                    "10.10.1.50": {
+                        "posture": "unhealthy",
+                        "device_id": "laptop-bob",
+                        "checked_at": 1784569000,
+                        "signals": self._mock_signals(disk=False),
+                    }
+                }
+            )
+        )
         authz_bridge_module.POSTURE_STORE_PATH = str(store)
 
         with patch.object(authz_bridge_module, "_get_wg_peers", return_value={}):
@@ -92,25 +103,114 @@ class TestPeerProvisioningAPI:
         data = resp.get_json()
         assert data["count"] == 0
 
+    def test_add_peer_denied_for_non_admin_session(
+        self, client, authz_bridge_module, tmp_path
+    ):
+        authz_bridge_module.POSTURE_STORE_PATH = str(tmp_path / "posture.json")
+        authz_bridge_module.PEERS_CONF_PATH = str(tmp_path / "peers.conf")
+
+        payload = (
+            base64.urlsafe_b64encode(
+                json.dumps(
+                    {
+                        "email": "user@test.com",
+                        "auth_time": 1700000000,
+                        "amr": ["webauthn"],
+                        "groups": ["engineers"],
+                    }
+                ).encode()
+            )
+            .decode()
+            .rstrip("=")
+        )
+        fake_oauth = MagicMock()
+        fake_oauth.status_code = 202
+        fake_oauth.headers = {"Authorization": f"Bearer hdr.{payload}.sig"}
+
+        with patch("requests.get", return_value=fake_oauth):
+            resp = client.post(
+                "/api/peers",
+                json={
+                    "public_key": "A" * 44,
+                    "device_name": "test-device",
+                    "email": "test@test.com",
+                },
+            )
+
+        assert resp.status_code == 403
+
+    def test_add_peer_allowed_for_admin_session(
+        self, client, authz_bridge_module, tmp_path
+    ):
+        authz_bridge_module.POSTURE_STORE_PATH = str(tmp_path / "posture.json")
+        authz_bridge_module.PEERS_CONF_PATH = str(tmp_path / "peers.conf")
+
+        payload = (
+            base64.urlsafe_b64encode(
+                json.dumps(
+                    {
+                        "email": "admin@test.com",
+                        "auth_time": 1700000000,
+                        "amr": ["webauthn"],
+                        "groups": ["admins", "engineers"],
+                    }
+                ).encode()
+            )
+            .decode()
+            .rstrip("=")
+        )
+        fake_oauth = MagicMock()
+        fake_oauth.status_code = 202
+        fake_oauth.headers = {"Authorization": f"Bearer hdr.{payload}.sig"}
+
+        with (
+            patch("requests.get", return_value=fake_oauth),
+            patch("subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(
+                returncode=0,
+                stdout="",
+                stderr="",
+            )
+            resp = client.post(
+                "/api/peers",
+                json={
+                    "public_key": "A" * 44,
+                    "device_name": "laptop-admin",
+                    "email": "admin@test.com",
+                },
+            )
+
+        assert resp.status_code == 201
+        data = resp.get_json()
+        assert data["status"] == "provisioned"
+
     def test_add_peer_requires_admin_token(self, client, authz_bridge_module, tmp_path):
         authz_bridge_module.POSTURE_STORE_PATH = str(tmp_path / "posture.json")
         authz_bridge_module.PEERS_CONF_PATH = str(tmp_path / "peers.conf")
 
-        resp = client.post("/api/peers", json={
-            "public_key": "A" * 44,
-            "device_name": "test-device",
-            "email": "test@test.com",
-        })
+        resp = client.post(
+            "/api/peers",
+            json={
+                "public_key": "A" * 44,
+                "device_name": "test-device",
+                "email": "test@test.com",
+            },
+        )
 
         assert resp.status_code == 403
 
     def test_add_peer_invalid_key(self, client, authz_bridge_module, tmp_path):
         authz_bridge_module.POSTURE_STORE_PATH = str(tmp_path / "posture.json")
 
-        resp = client.post("/api/peers", json={
-            "public_key": "short",
-            "device_name": "test",
-        }, headers=self._auth_headers())
+        resp = client.post(
+            "/api/peers",
+            json={
+                "public_key": "short",
+                "device_name": "test",
+            },
+            headers=self._auth_headers(),
+        )
 
         assert resp.status_code == 400
 
@@ -120,14 +220,20 @@ class TestPeerProvisioningAPI:
 
         with patch("subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(
-                returncode=0, stdout="", stderr="",
+                returncode=0,
+                stdout="",
+                stderr="",
             )
 
-            resp = client.post("/api/peers", json={
-                "public_key": "A" * 44,
-                "device_name": "laptop-alice",
-                "email": "alice@test.com",
-            }, headers=self._auth_headers())
+            resp = client.post(
+                "/api/peers",
+                json={
+                    "public_key": "A" * 44,
+                    "device_name": "laptop-alice",
+                    "email": "alice@test.com",
+                },
+                headers=self._auth_headers(),
+            )
 
         assert resp.status_code == 201
         data = resp.get_json()
@@ -135,9 +241,7 @@ class TestPeerProvisioningAPI:
         assert data["device_name"] == "laptop-alice"
 
     def test_next_ip_endpoint(self, client, authz_bridge_module, tmp_path):
-        authz_bridge_module.POSTURE_STORE_PATH = str(
-            tmp_path / "posture.json"
-        )
+        authz_bridge_module.POSTURE_STORE_PATH = str(tmp_path / "posture.json")
 
         resp = client.get("/api/peers/next-ip")
 

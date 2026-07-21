@@ -9,11 +9,16 @@ import pytest
 # _decode_id_token tests
 # ---------------------------------------------------------------------------
 
+
 class TestDecodeIdToken:
     def test_valid_token_returns_claims(self, authz_bridge_module):
-        payload = base64.urlsafe_b64encode(
-            json.dumps({"email": "alice@test.com", "amr": ["webauthn"]}).encode()
-        ).decode().rstrip("=")
+        payload = (
+            base64.urlsafe_b64encode(
+                json.dumps({"email": "alice@test.com", "amr": ["webauthn"]}).encode()
+            )
+            .decode()
+            .rstrip("=")
+        )
 
         result = authz_bridge_module._decode_id_token(f"Bearer hdr.{payload}.sig")
 
@@ -33,7 +38,9 @@ class TestDecodeIdToken:
         assert authz_bridge_module._decode_id_token("Bearer header.payload") == {}
 
     def test_invalid_base64_returns_empty(self, authz_bridge_module):
-        assert authz_bridge_module._decode_id_token("Bearer hdr.!!!invalid!!!.sig") == {}
+        assert (
+            authz_bridge_module._decode_id_token("Bearer hdr.!!!invalid!!!.sig") == {}
+        )
 
     def test_empty_payload_returns_empty_dict(self, authz_bridge_module):
         payload = base64.urlsafe_b64encode(b"").decode().rstrip("=")
@@ -41,9 +48,13 @@ class TestDecodeIdToken:
         assert result == {}
 
     def test_jwt_with_auth_time(self, authz_bridge_module):
-        payload = base64.urlsafe_b64encode(
-            json.dumps({"email": "a@b.c", "auth_time": 1700000000}).encode()
-        ).decode().rstrip("=")
+        payload = (
+            base64.urlsafe_b64encode(
+                json.dumps({"email": "a@b.c", "auth_time": 1700000000}).encode()
+            )
+            .decode()
+            .rstrip("=")
+        )
 
         result = authz_bridge_module._decode_id_token(f"Bearer h.{payload}.s")
 
@@ -54,12 +65,13 @@ class TestDecodeIdToken:
 # get_posture tests
 # ---------------------------------------------------------------------------
 
+
 class TestGetPosture:
     def test_returns_healthy_when_present(self, authz_bridge_module, tmp_path):
         store = tmp_path / "posture.json"
-        store.write_text(json.dumps({
-            "10.10.1.50": {"posture": "healthy", "device_id": "laptop-1"}
-        }))
+        store.write_text(
+            json.dumps({"10.10.1.50": {"posture": "healthy", "device_id": "laptop-1"}})
+        )
         authz_bridge_module.POSTURE_STORE_PATH = str(store)
 
         result = authz_bridge_module.get_posture("10.10.1.50")
@@ -69,9 +81,7 @@ class TestGetPosture:
 
     def test_returns_unhealthy_for_unknown_ip(self, authz_bridge_module, tmp_path):
         store = tmp_path / "posture.json"
-        store.write_text(json.dumps({
-            "10.10.1.50": {"posture": "healthy"}
-        }))
+        store.write_text(json.dumps({"10.10.1.50": {"posture": "healthy"}}))
         authz_bridge_module.POSTURE_STORE_PATH = str(store)
 
         result = authz_bridge_module.get_posture("10.10.1.99")
@@ -110,15 +120,22 @@ class TestGetPosture:
 # check_identity tests (mocked oauth2-proxy)
 # ---------------------------------------------------------------------------
 
+
 class TestCheckIdentity:
     def test_authenticated_with_mfa(self, authz_bridge_module):
-        payload = base64.urlsafe_b64encode(
-            json.dumps({
-                "email": "alice@test.com",
-                "auth_time": 1700000000,
-                "amr": ["webauthn", "pwd"],
-            }).encode()
-        ).decode().rstrip("=")
+        payload = (
+            base64.urlsafe_b64encode(
+                json.dumps(
+                    {
+                        "email": "alice@test.com",
+                        "auth_time": 1700000000,
+                        "amr": ["webauthn", "pwd"],
+                    }
+                ).encode()
+            )
+            .decode()
+            .rstrip("=")
+        )
         fake_response = MagicMock()
         fake_response.status_code = 202
         fake_response.headers = {"Authorization": f"Bearer hdr.{payload}.sig"}
@@ -148,14 +165,94 @@ class TestCheckIdentity:
 
         assert result["authenticated"] is False
 
+    def test_is_admin_true_when_admin_in_groups(self, authz_bridge_module):
+        payload = (
+            base64.urlsafe_b64encode(
+                json.dumps(
+                    {
+                        "email": "admin@test.com",
+                        "auth_time": 1700000000,
+                        "amr": ["webauthn"],
+                        "groups": ["admins", "engineers"],
+                    }
+                ).encode()
+            )
+            .decode()
+            .rstrip("=")
+        )
+        fake_response = MagicMock()
+        fake_response.status_code = 202
+        fake_response.headers = {"Authorization": f"Bearer hdr.{payload}.sig"}
+
+        with patch("requests.get", return_value=fake_response):
+            result = authz_bridge_module.check_identity({"Cookie": "session=abc"})
+
+        assert result["is_admin"] is True
+        assert "admins" in result["groups"]
+
+    def test_is_admin_false_when_no_admins_group(self, authz_bridge_module):
+        payload = (
+            base64.urlsafe_b64encode(
+                json.dumps(
+                    {
+                        "email": "user@test.com",
+                        "auth_time": 1700000000,
+                        "amr": ["webauthn"],
+                        "groups": ["engineers"],
+                    }
+                ).encode()
+            )
+            .decode()
+            .rstrip("=")
+        )
+        fake_response = MagicMock()
+        fake_response.status_code = 202
+        fake_response.headers = {"Authorization": f"Bearer hdr.{payload}.sig"}
+
+        with patch("requests.get", return_value=fake_response):
+            result = authz_bridge_module.check_identity({"Cookie": "session=abc"})
+
+        assert result["is_admin"] is False
+        assert "admins" not in result["groups"]
+
+    def test_is_admin_defaults_false_when_no_groups_in_token(self, authz_bridge_module):
+        payload = (
+            base64.urlsafe_b64encode(
+                json.dumps(
+                    {
+                        "email": "user@test.com",
+                        "auth_time": 1700000000,
+                        "amr": ["webauthn"],
+                    }
+                ).encode()
+            )
+            .decode()
+            .rstrip("=")
+        )
+        fake_response = MagicMock()
+        fake_response.status_code = 202
+        fake_response.headers = {"Authorization": f"Bearer hdr.{payload}.sig"}
+
+        with patch("requests.get", return_value=fake_response):
+            result = authz_bridge_module.check_identity({"Cookie": "session=abc"})
+
+        assert result["is_admin"] is False
+        assert result["groups"] == []
+
     def test_mfa_false_when_no_webauthn_in_amr(self, authz_bridge_module):
-        payload = base64.urlsafe_b64encode(
-            json.dumps({
-                "email": "bob@test.com",
-                "auth_time": 1700000000,
-                "amr": ["pwd"],
-            }).encode()
-        ).decode().rstrip("=")
+        payload = (
+            base64.urlsafe_b64encode(
+                json.dumps(
+                    {
+                        "email": "bob@test.com",
+                        "auth_time": 1700000000,
+                        "amr": ["pwd"],
+                    }
+                ).encode()
+            )
+            .decode()
+            .rstrip("=")
+        )
         fake_response = MagicMock()
         fake_response.status_code = 202
         fake_response.headers = {"Authorization": f"Bearer hdr.{payload}.sig"}
@@ -169,6 +266,7 @@ class TestCheckIdentity:
 # ---------------------------------------------------------------------------
 # /validate endpoint tests (integration with mocked OPA + oauth2-proxy)
 # ---------------------------------------------------------------------------
+
 
 class TestValidateEndpoint:
     @pytest.fixture
@@ -184,9 +282,15 @@ class TestValidateEndpoint:
     def _mock_oauth2_proxy(self, email="alice@test.com", amr=None):
         if amr is None:
             amr = ["webauthn"]
-        payload = base64.urlsafe_b64encode(
-            json.dumps({"email": email, "auth_time": 1700000000, "amr": amr}).encode()
-        ).decode().rstrip("=")
+        payload = (
+            base64.urlsafe_b64encode(
+                json.dumps(
+                    {"email": email, "auth_time": 1700000000, "amr": amr}
+                ).encode()
+            )
+            .decode()
+            .rstrip("=")
+        )
         fake_resp = MagicMock()
         fake_resp.status_code = 202
         fake_resp.headers = {"Authorization": f"Bearer hdr.{payload}.sig"}
@@ -198,13 +302,18 @@ class TestValidateEndpoint:
         opa_allow = MagicMock(json=lambda: {"result": True})
         opa_reason = MagicMock(json=lambda: {"result": "allowed"})
 
-        with patch("requests.get", return_value=oauth_resp), \
-             patch("requests.post", side_effect=[opa_allow, opa_reason]):
-            resp = client.get("/validate", headers={
-                "X-Original-URI": "/public",
-                "X-Forwarded-For": "127.0.0.1",
-                "Cookie": "session=abc",
-            })
+        with (
+            patch("requests.get", return_value=oauth_resp),
+            patch("requests.post", side_effect=[opa_allow, opa_reason]),
+        ):
+            resp = client.get(
+                "/validate",
+                headers={
+                    "X-Original-URI": "/public",
+                    "X-Forwarded-For": "127.0.0.1",
+                    "Cookie": "session=abc",
+                },
+            )
 
         assert resp.status_code == 200
 
@@ -212,15 +321,22 @@ class TestValidateEndpoint:
         self._setup_posture(authz_bridge_module, tmp_path, "127.0.0.1", "unhealthy")
         oauth_resp = self._mock_oauth2_proxy()
         opa_allow = MagicMock(json=lambda: {"result": False})
-        opa_reason = MagicMock(json=lambda: {"result": "denied: device posture unhealthy"})
+        opa_reason = MagicMock(
+            json=lambda: {"result": "denied: device posture unhealthy"}
+        )
 
-        with patch("requests.get", return_value=oauth_resp), \
-             patch("requests.post", side_effect=[opa_allow, opa_reason]):
-            resp = client.get("/validate", headers={
-                "X-Original-URI": "/public",
-                "X-Forwarded-For": "127.0.0.1",
-                "Cookie": "session=abc",
-            })
+        with (
+            patch("requests.get", return_value=oauth_resp),
+            patch("requests.post", side_effect=[opa_allow, opa_reason]),
+        ):
+            resp = client.get(
+                "/validate",
+                headers={
+                    "X-Original-URI": "/public",
+                    "X-Forwarded-For": "127.0.0.1",
+                    "Cookie": "session=abc",
+                },
+            )
 
         assert resp.status_code == 403
         assert b"posture unhealthy" in resp.headers.get("X-ZTLab-Reason", b"").encode()
@@ -230,15 +346,22 @@ class TestValidateEndpoint:
         fake_resp = MagicMock()
         fake_resp.status_code = 401
         opa_allow = MagicMock(json=lambda: {"result": False})
-        opa_reason = MagicMock(json=lambda: {"result": "denied: user not authenticated"})
+        opa_reason = MagicMock(
+            json=lambda: {"result": "denied: user not authenticated"}
+        )
 
-        with patch("requests.get", return_value=fake_resp), \
-             patch("requests.post", side_effect=[opa_allow, opa_reason]):
-            resp = client.get("/validate", headers={
-                "X-Original-URI": "/public",
-                "X-Forwarded-For": "127.0.0.1",
-                "Cookie": "bad=cookie",
-            })
+        with (
+            patch("requests.get", return_value=fake_resp),
+            patch("requests.post", side_effect=[opa_allow, opa_reason]),
+        ):
+            resp = client.get(
+                "/validate",
+                headers={
+                    "X-Original-URI": "/public",
+                    "X-Forwarded-For": "127.0.0.1",
+                    "Cookie": "bad=cookie",
+                },
+            )
 
         assert resp.status_code == 401
         assert resp.headers.get("Location") == "/oauth2/sign_in"
@@ -249,15 +372,50 @@ class TestValidateEndpoint:
 
         import requests as req_lib
 
-        with patch("requests.get", return_value=oauth_resp), \
-             patch("requests.post", side_effect=req_lib.ConnectionError("refused")):
-            resp = client.get("/validate", headers={
-                "X-Original-URI": "/public",
-                "X-Forwarded-For": "127.0.0.1",
-                "Cookie": "session=abc",
-            })
+        with (
+            patch("requests.get", return_value=oauth_resp),
+            patch("requests.post", side_effect=req_lib.ConnectionError("refused")),
+        ):
+            resp = client.get(
+                "/validate",
+                headers={
+                    "X-Original-URI": "/public",
+                    "X-Forwarded-For": "127.0.0.1",
+                    "Cookie": "session=abc",
+                },
+            )
 
         assert resp.status_code == 403
+
+    def test_opa_input_includes_is_admin(self, client, authz_bridge_module, tmp_path):
+        self._setup_posture(authz_bridge_module, tmp_path, "127.0.0.1")
+        oauth_resp = self._mock_oauth2_proxy(amr=["webauthn"])
+        opa_post_calls = []
+
+        def opa_side_effect(url, json, timeout):
+            opa_post_calls.append(json)
+            mock = MagicMock()
+            mock.json.return_value = {"result": True if "allow" in url else "allowed"}
+            return mock
+
+        with (
+            patch("requests.get", return_value=oauth_resp),
+            patch("requests.post", side_effect=opa_side_effect),
+        ):
+            resp = client.get(
+                "/validate",
+                headers={
+                    "X-Original-URI": "/admin",
+                    "X-Forwarded-For": "127.0.0.1",
+                    "Cookie": "session=abc",
+                },
+            )
+
+        assert resp.status_code == 200
+        assert len(opa_post_calls) == 2
+        sent_input = opa_post_calls[0]["input"]
+        assert "is_admin" in sent_input["user"]
+        assert sent_input["user"]["is_admin"] is False
 
     def test_healthz(self, client):
         resp = client.get("/healthz")

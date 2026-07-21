@@ -15,7 +15,7 @@ scrape_configs:
           - localhost
         labels:
           job: nginx
-          __path__: /var/log/nginx/*.log
+          __path__: /var/log/nginx/{access,error}.log
     pipeline_stages:
       - regex:
           expression: '^(?P<remote_addr>\S+) - .* \[(?P<time_local>[^\]]+)\] "(?P<method>\S+) (?P<uri>\S+) [^"]*" (?P<status>\d+) (?P<body_bytes_sent>\d+)'

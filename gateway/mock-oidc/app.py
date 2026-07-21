@@ -76,6 +76,7 @@ def token():
             "name": USERINFO["name"],
             "preferred_username": USERINFO["preferred_username"],
             "email": USERINFO["email"],
+            "groups": USERINFO["groups"],
         }
     )
 

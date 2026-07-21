@@ -55,10 +55,27 @@ base_ok if {
 	input.device.posture == "healthy"
 }
 
-# --- Allow rule: public paths just need base identity+posture ---
+# --- Allow rule: admin paths require admin role ---
+allow if {
+	base_ok
+	startswith(input.path, "/admin")
+	input.user.is_admin == true
+	not very_stale_session
+}
+
+allow if {
+	base_ok
+	startswith(input.path, "/api/peers")
+	input.user.is_admin == true
+	not very_stale_session
+}
+
+# --- Allow rule: general paths just need base identity+posture ---
 allow if {
 	base_ok
 	not startswith(input.path, "/sensitive")
+	not startswith(input.path, "/admin")
+	not startswith(input.path, "/api/peers")
 	not very_stale_session
 }
 
@@ -105,6 +122,18 @@ reason := "denied: sensitive path requires re-auth within 5 minutes" if {
 	startswith(input.path, "/sensitive")
 	not fresh_auth
 	not stale_session
+}
+
+reason := "denied: admin access requires admin role" if {
+	base_ok
+	startswith(input.path, "/admin")
+	input.user.is_admin == false
+}
+
+reason := "denied: peer API requires admin role" if {
+	base_ok
+	startswith(input.path, "/api/peers")
+	input.user.is_admin == false
 }
 
 reason := "allowed" if {

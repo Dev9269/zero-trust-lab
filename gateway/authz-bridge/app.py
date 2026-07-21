@@ -40,9 +40,7 @@ OAUTH2_PROXY_AUTH_URL: str = os.environ.get(
     "OAUTH2_PROXY_AUTH_URL", "http://oauth2-proxy:4180/oauth2/auth"
 )
 OPA_URL: str = os.environ.get("OPA_URL", "http://opa:8181/v1/data/ztlab/authz")
-POSTURE_STORE_PATH: str = os.environ.get(
-    "POSTURE_STORE_PATH", "/data/posture.json"
-)
+POSTURE_STORE_PATH: str = os.environ.get("POSTURE_STORE_PATH", "/data/posture.json")
 WG_INTERFACE: str = os.environ.get("WG_INTERFACE", "wg0")
 WG_SUBNET: str = os.environ.get("WG_SUBNET", "10.8.0")
 PEERS_CONF_PATH: str = os.environ.get("PEERS_CONF_PATH", "/data/peers.conf")
@@ -83,7 +81,7 @@ def _decode_id_token(header_value: str) -> dict[str, Any]:
     """
     if not header_value.startswith("Bearer "):
         return {}
-    token = header_value[len("Bearer "):]
+    token = header_value[len("Bearer ") :]
     parts = token.split(".")
     if len(parts) != 3:
         return {}
@@ -116,17 +114,19 @@ def check_identity(incoming_headers: Any) -> dict[str, Any]:
     if r.status_code != 202:
         return {"authenticated": False}
 
-    id_token: dict[str, Any] = _decode_id_token(
-        r.headers.get("Authorization", "")
-    )
-    email: str = id_token.get(
-        "email", r.headers.get("X-Auth-Request-Email", "")
-    )
+    id_token: dict[str, Any] = _decode_id_token(r.headers.get("Authorization", ""))
+    email: str = id_token.get("email", r.headers.get("X-Auth-Request-Email", ""))
     auth_time: int = id_token.get("auth_time", 0)
     amr: list[str] = id_token.get("amr", [])
+    groups: list[str] = id_token.get("groups", [])
+    is_admin: bool = "admins" in groups
 
     log.info(
-        "id_token claims: email=%s auth_time=%s amr=%s", email, auth_time, amr
+        "id_token claims: email=%s auth_time=%s amr=%s groups=%s",
+        email,
+        auth_time,
+        amr,
+        groups,
     )
 
     return {
@@ -134,15 +134,15 @@ def check_identity(incoming_headers: Any) -> dict[str, Any]:
         "email": email,
         "mfa_verified": "webauthn" in amr or "mfa" in str(amr).lower(),
         "auth_time": int(auth_time or 0),
+        "groups": groups,
+        "is_admin": is_admin,
     }
 
 
 @app.route("/validate", methods=["GET"])
 def validate() -> Response:
     original_uri: str = request.headers.get("X-Original-URI", "/")
-    source_ip: str = request.headers.get(
-        "X-Forwarded-For", request.remote_addr or ""
-    )
+    source_ip: str = request.headers.get("X-Forwarded-For", request.remote_addr or "")
 
     identity: dict[str, Any] = check_identity(request.headers)
     posture: dict[str, Any] = get_posture(source_ip)
@@ -154,6 +154,7 @@ def validate() -> Response:
                 "mfa_verified": identity.get("mfa_verified", False),
                 "auth_time": identity.get("auth_time", 0),
                 "email": identity.get("email", ""),
+                "is_admin": identity.get("is_admin", False),
             },
             "device": {
                 "ip": source_ip,
@@ -167,25 +168,23 @@ def validate() -> Response:
     reason: str = "denied: policy engine unreachable"
 
     try:
-        opa_resp = requests.post(
-            f"{OPA_URL}/allow", json=opa_input, timeout=3
-        )
-        opa_reason_resp = requests.post(
-            f"{OPA_URL}/reason", json=opa_input, timeout=3
-        )
+        opa_resp = requests.post(f"{OPA_URL}/allow", json=opa_input, timeout=3)
+        opa_reason_resp = requests.post(f"{OPA_URL}/reason", json=opa_input, timeout=3)
         allowed = opa_resp.json().get("result", False)
         reason = opa_reason_resp.json().get("result", "unknown")
     except requests.RequestException as e:
         log.error("OPA unreachable, failing closed: %s", e)
 
-    _write_audit_log({
-        "event": "access_decision",
-        "path": original_uri,
-        "source_ip": source_ip,
-        "email": identity.get("email", ""),
-        "allowed": allowed,
-        "reason": reason,
-    })
+    _write_audit_log(
+        {
+            "event": "access_decision",
+            "path": original_uri,
+            "source_ip": source_ip,
+            "email": identity.get("email", ""),
+            "allowed": allowed,
+            "reason": reason,
+        }
+    )
 
     log.info(
         "decision path=%s ip=%s email=%s allowed=%s reason=%s",
@@ -210,12 +209,15 @@ def validate() -> Response:
 # WireGuard Peer Provisioning API
 # ---------------------------------------------------------------------------
 
+
 def _get_wg_peers() -> dict[str, dict[str, str]]:
     """Parse current WireGuard peers into {public_key: {allowed_ips, endpoint}}."""
     try:
         result = subprocess.run(
             ["wg", "show", WG_INTERFACE, "dump"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         lines = result.stdout.strip().split("\n")[1:]
         peers: dict[str, dict[str, str]] = {}
@@ -259,8 +261,17 @@ def _add_wg_peer(pubkey: str, allowed_ip: str) -> bool:
     """Add a WireGuard peer at runtime."""
     try:
         subprocess.run(
-            ["wg", "set", WG_INTERFACE, "peer", pubkey, "allowed-ips", f"{allowed_ip}/32"],
-            check=True, timeout=5,
+            [
+                "wg",
+                "set",
+                WG_INTERFACE,
+                "peer",
+                pubkey,
+                "allowed-ips",
+                f"{allowed_ip}/32",
+            ],
+            check=True,
+            timeout=5,
         )
         return True
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
@@ -273,25 +284,33 @@ def list_peers() -> Response:
     peers = _get_wg_peers()
     peer_list = []
     for pubkey, info in peers.items():
-        peer_list.append({
-            "public_key": pubkey,
-            "public_key_short": pubkey[:16] + "...",
-            "allowed_ips": info["allowed_ips"],
-            "endpoint": info["endpoint"],
-        })
+        peer_list.append(
+            {
+                "public_key": pubkey,
+                "public_key_short": pubkey[:16] + "...",
+                "allowed_ips": info["allowed_ips"],
+                "endpoint": info["endpoint"],
+            }
+        )
     return jsonify({"peers": peer_list, "count": len(peer_list)})
 
 
 @app.route("/api/peers", methods=["POST"])
 def add_peer() -> Response:
-    """Add a new WireGuard peer. Requires admin token + authenticated user."""
+    """Add a new WireGuard peer. Requires admin token or admin session."""
+    identity = check_identity(request.headers)
     auth_header = request.headers.get("Authorization", "")
-    if not auth_header.endswith(ADMIN_TOKEN):
-        _write_audit_log({
-            "event": "peer_provision_denied",
-            "reason": "invalid_admin_token",
-            "source_ip": request.remote_addr,
-        })
+    is_admin_session = identity.get("is_admin", False)
+    has_admin_token = auth_header.endswith(ADMIN_TOKEN)
+    if not (has_admin_token or is_admin_session):
+        _write_audit_log(
+            {
+                "event": "peer_provision_denied",
+                "reason": "not_admin",
+                "source_ip": request.remote_addr,
+                "email": identity.get("email", ""),
+            }
+        )
         return jsonify({"error": "unauthorized"}), 403
 
     data = request.get_json(silent=True) or {}
@@ -323,29 +342,36 @@ def add_peer() -> Response:
     if not _add_wg_peer(pubkey, target_ip):
         return jsonify({"error": "failed to add peer to WireGuard"}), 500
 
-    _write_audit_log({
-        "event": "peer_provisioned",
-        "public_key": pubkey[:16] + "...",
-        "device_name": device_name,
-        "email": email,
-        "assigned_ip": target_ip,
-    })
+    _write_audit_log(
+        {
+            "event": "peer_provisioned",
+            "public_key": pubkey[:16] + "...",
+            "device_name": device_name,
+            "email": email,
+            "assigned_ip": target_ip,
+        }
+    )
 
     log.info("Peer provisioned: %s (%s) -> %s", device_name, email, target_ip)
 
-    return jsonify({
-        "status": "provisioned",
-        "public_key": pubkey[:16] + "...",
-        "allowed_ip": target_ip,
-        "device_name": device_name,
-    }), 201
+    return jsonify(
+        {
+            "status": "provisioned",
+            "public_key": pubkey[:16] + "...",
+            "allowed_ip": target_ip,
+            "device_name": device_name,
+        }
+    ), 201
 
 
 @app.route("/api/peers/<pubkey>", methods=["DELETE"])
 def remove_peer(pubkey: str) -> Response:
     """Remove a WireGuard peer by public key prefix or full key."""
+    identity = check_identity(request.headers)
     auth_header = request.headers.get("Authorization", "")
-    if not auth_header.endswith(ADMIN_TOKEN):
+    is_admin_session = identity.get("is_admin", False)
+    has_admin_token = auth_header.endswith(ADMIN_TOKEN)
+    if not (has_admin_token or is_admin_session):
         return jsonify({"error": "unauthorized"}), 403
 
     existing = _get_wg_peers()
@@ -361,15 +387,18 @@ def remove_peer(pubkey: str) -> Response:
     try:
         subprocess.run(
             ["wg", "set", WG_INTERFACE, "peer", target_key, "remove"],
-            check=True, timeout=5,
+            check=True,
+            timeout=5,
         )
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         return jsonify({"error": "failed to remove peer"}), 500
 
-    _write_audit_log({
-        "event": "peer_removed",
-        "public_key": target_key[:16] + "...",
-    })
+    _write_audit_log(
+        {
+            "event": "peer_removed",
+            "public_key": target_key[:16] + "...",
+        }
+    )
 
     return jsonify({"status": "removed", "public_key": target_key[:16] + "..."})
 
@@ -387,7 +416,10 @@ def next_ip() -> Response:
 # Continuous Authentication / Risk Scoring
 # ---------------------------------------------------------------------------
 
-def _calculate_risk_score(identity: dict, posture: dict, source_ip: str) -> dict[str, Any]:
+
+def _calculate_risk_score(
+    identity: dict, posture: dict, source_ip: str
+) -> dict[str, Any]:
     """Calculate a risk score (0-100) based on identity, posture, and context.
 
     Higher score = higher risk. Threshold is configurable via RISK_THRESHOLD.
@@ -451,14 +483,16 @@ def risk_score() -> Response:
     posture = get_posture(source_ip)
     result = _calculate_risk_score(identity, posture, source_ip)
 
-    _write_audit_log({
-        "event": "risk_score_calculated",
-        "source_ip": source_ip,
-        "email": identity.get("email", ""),
-        "score": result["score"],
-        "requires_step_up": result["requires_step_up"],
-        "factors": result["factors"],
-    })
+    _write_audit_log(
+        {
+            "event": "risk_score_calculated",
+            "source_ip": source_ip,
+            "email": identity.get("email", ""),
+            "score": result["score"],
+            "requires_step_up": result["requires_step_up"],
+            "factors": result["factors"],
+        }
+    )
 
     return jsonify(result)
 
@@ -562,11 +596,13 @@ def _get_wg_peers_list() -> list[dict]:
     peers = _get_wg_peers()
     result = []
     for pubkey, info in peers.items():
-        result.append({
-            "public_key_short": pubkey[:16] + "...",
-            "allowed_ips": info["allowed_ips"],
-            "endpoint": info.get("endpoint", ""),
-        })
+        result.append(
+            {
+                "public_key_short": pubkey[:16] + "...",
+                "allowed_ips": info["allowed_ips"],
+                "endpoint": info.get("endpoint", ""),
+            }
+        )
     return result
 
 

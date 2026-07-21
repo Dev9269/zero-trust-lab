@@ -1,4 +1,3 @@
-
 def test_public_page_has_classification_header(demo_app_module):
     client = demo_app_module.app.test_client()
     response = client.get("/public")
@@ -29,6 +28,14 @@ def test_api_data_returns_classified_objects(demo_app_module):
     assert "objects" in data
     assert "public-announcement" in data["objects"]
     assert "employee-records" in data["objects"]
+    assert "encryption-keys" not in data["objects"]
+
+
+def test_api_data_restricted_object_not_accessible(demo_app_module):
+    client = demo_app_module.app.test_client()
+    response = client.get("/api/data/encryption-keys")
+
+    assert response.status_code == 404
 
 
 def test_api_data_single_object(demo_app_module):

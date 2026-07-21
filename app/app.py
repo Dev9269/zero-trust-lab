@@ -11,6 +11,7 @@ header that labels the sensitivity of the data being returned. This addresses
 the Data pillar (CISA ZTMM v2.0) by adding attribute-based data labeling
 even though the PEP handles access decisions.
 """
+
 import logging
 import time
 
@@ -146,9 +147,7 @@ PAGE_TEMPLATE = """
 
 def _get_classification_for_path(path: str) -> dict:
     """Determine data classification based on request path."""
-    for prefix, meta in sorted(
-        DATA_CLASSIFICATIONS.items(), key=lambda x: -len(x[0])
-    ):
+    for prefix, meta in sorted(DATA_CLASSIFICATIONS.items(), key=lambda x: -len(x[0])):
         if path.startswith(prefix):
             return meta
     return {
@@ -208,8 +207,8 @@ def public():
         zone_label="PUBLIC ZONE",
         banner_color="#3ddc97",
         body_text="Any valid authenticated session with healthy device "
-                   "posture reaches this page. No re-authentication "
-                   "freshness requirement applies here.",
+        "posture reaches this page. No re-authentication "
+        "freshness requirement applies here.",
         path=request.path,
         classification=meta["classification"],
         classification_color=_classification_color(meta["classification"]),
@@ -226,8 +225,8 @@ def sensitive():
         zone_label="SENSITIVE ZONE — RE-AUTH REQUIRED",
         banner_color="#ff6b6b",
         body_text="Reaching this page requires a WebAuthn re-authentication "
-                   "within the last 5 minutes, checked against your actual "
-                   "last-auth timestamp — not just session-start time.",
+        "within the last 5 minutes, checked against your actual "
+        "last-auth timestamp — not just session-start time.",
         path=request.path,
         classification=meta["classification"],
         classification_color=_classification_color(meta["classification"]),
@@ -238,30 +237,41 @@ def sensitive():
 
 @app.route("/api/data")
 def api_data():
-    """API endpoint returning classified data objects with labels."""
+    """API endpoint returning classified data objects with labels.
+    RESTRICTED objects are excluded — they require admin clearance.
+    """
     classification = _get_classification_for_path("/api/data")
-    return jsonify({
-        "classification": classification["classification"],
-        "encryption_required": classification["encryption_required"],
-        "retention_days": classification["retention_days"],
-        "objects": DATA_OBJECTS,
-    })
+    filtered = {
+        obj_id: obj
+        for obj_id, obj in DATA_OBJECTS.items()
+        if obj.get("classification") != "RESTRICTED"
+    }
+    return jsonify(
+        {
+            "classification": classification["classification"],
+            "encryption_required": classification["encryption_required"],
+            "retention_days": classification["retention_days"],
+            "objects": filtered,
+        }
+    )
 
 
 @app.route("/api/data/<object_id>")
 def api_data_object(object_id):
     """Return a single data object with its classification metadata."""
     obj = DATA_OBJECTS.get(object_id)
-    if not obj:
+    if not obj or obj.get("classification") == "RESTRICTED":
         return jsonify({"error": "object not found"}), 404
     classification = _get_classification_for_path("/api/data")
-    return jsonify({
-        "id": obj["id"],
-        "classification": obj["classification"],
-        "owner": obj["owner"],
-        "content": obj["content"],
-        "parent_classification": classification["classification"],
-    })
+    return jsonify(
+        {
+            "id": obj["id"],
+            "classification": obj["classification"],
+            "owner": obj["owner"],
+            "content": obj["content"],
+            "parent_classification": classification["classification"],
+        }
+    )
 
 
 @app.route("/healthz")
