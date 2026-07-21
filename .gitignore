@@ -9,3 +9,5 @@ __pycache__/
 !.env.example
 gateway/certs/*.key
 gateway/posture-data/*.json
+gateway/nginx/certs/
+gateway/authz-bridge/data/

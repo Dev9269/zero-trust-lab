@@ -79,6 +79,7 @@ reason := "denied: session too old (>24h), full re-authentication required" if {
 reason := "denied: session stale (>8h), step-up re-auth required for sensitive" if {
 	base_ok
 	stale_session
+	not very_stale_session
 	not fresh_auth
 	startswith(input.path, "/sensitive")
 }

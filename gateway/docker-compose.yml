@@ -12,7 +12,7 @@
 
 services:
   opa:
-    image: openpolicyagent/opa:latest
+    image: openpolicyagent/opa:latest-debug
     command:
       - "run"
       - "--server"
@@ -23,7 +23,7 @@ services:
     ports:
       - "8181:8181"  # exposed for direct curl testing in Phase 4/7, remove for anything beyond a lab
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8181/health"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8181/health"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -80,15 +80,16 @@ services:
     restart: unless-stopped
 
   oauth2-proxy:
-    image: quay.io/oauth2-proxy/oauth2-proxy:latest
+    build: ./oauth2-proxy
     volumes:
       - ./oauth2-proxy/oauth2-proxy.cfg:/etc/oauth2-proxy.cfg:ro
     command: ["--config=/etc/oauth2-proxy.cfg"]
+    image: ztlab-oauth2-proxy
     depends_on:
       mock-oidc:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4180/ping"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:4180/ping"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -96,7 +97,8 @@ services:
     restart: unless-stopped
 
   nginx:
-    image: nginx:1.27
+    build: ./nginx
+    image: ztlab-nginx
     volumes:
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
       - ./nginx/certs:/etc/nginx/certs:ro
@@ -112,7 +114,7 @@ services:
       oauth2-proxy:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:80/"]
+      test: ["CMD", "curl", "-sf", "http://localhost:80/"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -128,7 +130,7 @@ services:
     ports:
       - "3100:3100"
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3100/ready"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3100/ready"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -165,7 +167,7 @@ services:
       loki:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/api/health"]
       interval: 10s
       timeout: 5s
       retries: 3
