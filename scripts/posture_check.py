@@ -24,7 +24,12 @@ import time
 
 POSTURE_STORE_PATH = "/shared/posture.json"  # shared volume with authz-bridge
 MAX_PATCH_AGE_DAYS = 30
-BLOCKLISTED_PROCESSES = ["nc", "ncat", "mimikatz"]  # example only — extend as needed
+BLOCKLISTED_PROCESSES = [
+    "nc", "ncat", "mimikatz",
+    "sliver", "sliver-server", "sliver-client",
+    "cobaltstrike", "teamserver",
+    "beacon", "brute_ratel", "havoc",
+]
 POSTURE_SIGNING_SECRET = os.environ.get("POSTURE_SIGNING_SECRET", "")
 
 

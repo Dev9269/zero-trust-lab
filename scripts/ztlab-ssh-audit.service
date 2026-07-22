@@ -1,0 +1,12 @@
+[Unit]
+Description=ZTLab SSH Key Audit — collect host key fingerprints and authorized_keys
+After=network.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/ssh_audit.py
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
