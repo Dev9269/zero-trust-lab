@@ -440,7 +440,7 @@ class TestValidateEndpoint:
         oauth_resp = self._mock_oauth2_proxy(amr=["webauthn"])
         opa_post_calls = []
 
-        def opa_side_effect(url, json, timeout):
+        def opa_side_effect(url, json, **kwargs):
             opa_post_calls.append(json)
             mock = MagicMock()
             mock.json.return_value = {"result": True if "allow" in url else "allowed"}

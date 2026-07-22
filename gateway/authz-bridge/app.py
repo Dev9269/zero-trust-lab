@@ -47,6 +47,7 @@ WG_SUBNET: str = os.environ.get("WG_SUBNET", "10.8.0")
 PEERS_CONF_PATH: str = os.environ.get("PEERS_CONF_PATH", "/data/peers.conf")
 AUDIT_LOG_PATH: str = os.environ.get("AUDIT_LOG_PATH", "/data/audit.jsonl")
 ADMIN_TOKEN: str = os.environ.get("ADMIN_TOKEN", "ztlab-admin-token")
+OPA_AUTH_TOKEN: str = os.environ.get("OPA_AUTH_TOKEN", "ztlab-opa-token-2026")
 MAX_POSTURE_AGE_SECONDS: int = int(os.environ.get("MAX_POSTURE_AGE_SECONDS", "300"))
 RISK_THRESHOLD: int = int(os.environ.get("RISK_THRESHOLD", "70"))
 POSTURE_SIGNING_SECRET: str = os.environ.get("POSTURE_SIGNING_SECRET", "")
@@ -210,9 +211,11 @@ def validate() -> Response:
     allowed: bool = False
     reason: str = "denied: policy engine unreachable"
 
+    opa_headers = {"Authorization": f"Bearer {OPA_AUTH_TOKEN}"}
+
     try:
-        opa_resp = requests.post(f"{OPA_URL}/allow", json=opa_input, timeout=3)
-        opa_reason_resp = requests.post(f"{OPA_URL}/reason", json=opa_input, timeout=3)
+        opa_resp = requests.post(f"{OPA_URL}/allow", json=opa_input, headers=opa_headers, timeout=3)
+        opa_reason_resp = requests.post(f"{OPA_URL}/reason", json=opa_input, headers=opa_headers, timeout=3)
         allowed = opa_resp.json().get("result", False)
         reason = opa_reason_resp.json().get("result", "unknown")
     except requests.RequestException as e:

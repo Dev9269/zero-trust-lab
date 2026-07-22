@@ -218,8 +218,51 @@ Even with a valid, unexpired session cookie, /sensitive requires a recent authen
 | 3 | Spoof healthy posture | Denied (or file unreachable) | | □ PASS □ FAIL |
 | 4 | Access /sensitive without re-auth | 403 / re-auth reason | | □ PASS □ FAIL |
 
+## Attempt 5: OPA Policy Tamper via Exposed Management API
+
+**What this tests:** Can an attacker on untrusted-net overwrite OPA policy through the management API on port 8181?
+
+### Attack scenario
+OPA's REST API allows reading and writing policies via the `/v1/policies` endpoint. If the management port is exposed outside the compose network, an attacker can disable access controls entirely.
+
+### Expected mitigation
+- Port 8181 is NOT published to the host in `gateway/docker-compose.yml` (only reachable from other compose containers)
+- OPA runs with `--authentication=token --authorization=basic`, requiring a valid Bearer token for any API call, including policy queries
+- authz-bridge passes the `OPA_AUTH_TOKEN` on every policy query, so legitimate requests still work
+- In dev override (`docker-compose.override.yml`), 8181 is exposed but only for local testing
+
+### Commands (from attacker VM on untrusted-net, 10.10.2.10)
+```bash
+# 5.1 — Attempt direct connection to OPA on gateway
+curl -s --connect-timeout 5 http://10.10.2.1:8181/v1/policies 2>&1
+
+# 5.2 — Attempt to overwrite policy (should fail)
+curl -s -X PUT http://10.10.2.1:8181/v1/policies/ztlab/authz \
+  -H "Content-Type: text/plain" \
+  -d 'package ztlab.authz default allow := true' 2>&1
+```
+
+### Interpretation
+
+| Result | Meaning | Verdict |
+|--------|---------|---------|
+| Connection timed out / refused | Port 8181 not exposed to untrusted-net | **PASS** |
+| 401 Unauthorized | Port exposed but OPA auth blocks tamper | **PARTIAL PASS** |
+| Policy successfully overwritten | Critical control-plane breach | **FAIL** |
+
+## Summary Table
+
+| Attempt | Objective | Expected | Actual | Verdict |
+|---------|-----------|----------|--------|---------|
+| 1 | Direct network access to app | Timeout / no route | | □ PASS □ FAIL |
+| 2 | Replay expired session cookie | 302 redirect / 401 | | □ PASS □ FAIL |
+| 3 | Spoof healthy posture | Denied (or file unreachable) | | □ PASS □ FAIL |
+| 4 | Access /sensitive without re-auth | 403 / re-auth reason | | □ PASS □ FAIL |
+| 5 | OPA policy tamper via 8181 | Connection refused or 401 | | □ PASS □ FAIL |
+
 ## Lab Shortcuts Flagged
 
 1. **Attempt 3 is the most likely real gap.** The posture file has no integrity or authentication. Segmentation protects it but a trusted-net breach compromises it completely.
 2. **Attempt 2 depends on oauth2-proxy session config.** Verify `cookie_expire` is set.
 3. **Attempt 4 depends on auth_time being correctly populated.** Verify oauth2-proxy passes the `auth_time` claim and authz-bridge reads it correctly.
+4. **Attempt 5 is mitigated by port isolation + OPA auth token.** If running with `docker-compose.override.yml`, 8181 is exposed — only use in isolated dev environments.

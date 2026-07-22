@@ -18,7 +18,11 @@ services:
       - "run"
       - "--server"
       - "--addr=0.0.0.0:8181"
+      - "--authentication=token"
+      - "--authorization=basic"
       - "/policies/policy.rego"
+    environment:
+      OPA_AUTH_TOKEN: "${OPA_AUTH_TOKEN:-ztlab-opa-token-2026}"
     volumes:
       - ./opa/policy.rego:/policies/policy.rego:ro
     # Port 8181 intentionally NOT exposed — OPA only reachable via the
@@ -39,6 +43,7 @@ services:
       OPA_URL: "http://opa:8181/v1/data/ztlab/authz"
       POSTURE_STORE_PATH: "/shared/posture.json"
       POSTURE_SIGNING_SECRET: "${POSTURE_SIGNING_SECRET:-ztlab-posture-secret-2026}"
+      OPA_AUTH_TOKEN: "${OPA_AUTH_TOKEN:-ztlab-opa-token-2026}"
       WG_INTERFACE: "wg0"
       WG_SUBNET: "10.8.0"
       PEERS_CONF_PATH: "/data/peers.conf"
