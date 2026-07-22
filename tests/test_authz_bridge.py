@@ -70,7 +70,15 @@ class TestGetPosture:
     def test_returns_healthy_when_present(self, authz_bridge_module, tmp_path):
         store = tmp_path / "posture.json"
         store.write_text(
-            json.dumps({"10.10.1.50": {"posture": "healthy", "device_id": "laptop-1"}})
+            json.dumps(
+                {
+                    "10.10.1.50": {
+                        "posture": "healthy",
+                        "device_id": "laptop-1",
+                        "checked_at": int(__import__("time").time()),
+                    }
+                }
+            )
         )
         authz_bridge_module.POSTURE_STORE_PATH = str(store)
 
@@ -117,10 +125,16 @@ class TestGetPosture:
 
     def test_returns_healthy_for_signed_envelope(self, authz_bridge_module, tmp_path):
         import hmac as _hmac
+        import time as _time
 
         secret = "test-secret"
         authz_bridge_module.POSTURE_SIGNING_SECRET = secret
-        data = {"posture": "healthy", "device_id": "laptop-1", "checked_at": 9999999}
+        authz_bridge_module.MAX_POSTURE_AGE_SECONDS = 86400
+        data = {
+            "posture": "healthy",
+            "device_id": "laptop-1",
+            "checked_at": int(_time.time()),
+        }
         payload = json.dumps(data, separators=(",", ":"), sort_keys=True).encode()
         sig = base64.b64encode(
             _hmac.digest(secret.encode(), payload, "sha256")
@@ -323,8 +337,9 @@ class TestValidateEndpoint:
         return authz_bridge_module.app.test_client()
 
     def _setup_posture(self, authz_bridge_module, tmp_path, ip, posture="healthy"):
+        import time
         store = tmp_path / "posture.json"
-        store.write_text(json.dumps({ip: {"posture": posture}}))
+        store.write_text(json.dumps({ip: {"posture": posture, "checked_at": int(time.time())}}))
         authz_bridge_module.POSTURE_STORE_PATH = str(store)
 
     def _mock_oauth2_proxy(self, email="alice@test.com", amr=None):

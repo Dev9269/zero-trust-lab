@@ -96,6 +96,10 @@ def get_posture(source_ip: str) -> dict[str, Any]:
     if not _verify_posture_sig(data, sig):
         log.warning("posture signature invalid for %s — failing closed", source_ip)
         return {"posture": "unhealthy", "reason": "invalid posture signature"}
+    posture_age = time.time() - data.get("checked_at", 0)
+    if posture_age > MAX_POSTURE_AGE_SECONDS:
+        log.warning("posture stale for %s (%ds old) — failing closed", source_ip, int(posture_age))
+        return {"posture": "unhealthy", "reason": "stale posture data"}
     return data
 
 
