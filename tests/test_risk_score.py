@@ -131,6 +131,41 @@ class TestRiskScore:
         assert data["score"] == 100
         assert data["requires_step_up"] is True
 
+    def test_xff_spoofing_uses_forged_ip_posture(
+        self, client, authz_bridge_module, tmp_path,
+    ):
+        import json, time
+        good_signals = {
+            "disk_encrypted": True,
+            "patch_within_window": True,
+            "no_blocklisted_process": True,
+        }
+        store = tmp_path / "posture.json"
+        store.write_text(json.dumps({
+            "10.0.0.99": {
+                "posture": "healthy",
+                "signals": good_signals,
+                "checked_at": int(time.time()),
+            },
+            "172.16.1.1": {
+                "posture": "unhealthy",
+            },
+        }))
+        authz_bridge_module.POSTURE_STORE_PATH = str(store)
+
+        oauth_resp = self._mock_oauth2(auth_time=1700000000)
+
+        with patch("requests.get", return_value=oauth_resp):
+            resp = client.get("/api/risk-score", headers={
+                "X-Forwarded-For": "10.0.0.99",
+                "Cookie": "session=abc",
+            })
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["score"] < 70
+        assert "unhealthy_posture" not in data["factors"]
+
     def test_risk_score_includes_all_factors(
         self, client, authz_bridge_module, tmp_path,
     ):
