@@ -1,5 +1,6 @@
 import json
 import base64
+import os
 import time
 import uuid
 from flask import Flask, jsonify, request
@@ -8,12 +9,13 @@ app = Flask(__name__)
 
 ISSUER = "http://mock-oidc:9000"
 CLIENT_ID = "ztlab-client"
-CLIENT_SECRET = "ztlab-secret"
+CLIENT_SECRET = os.environ.get("MOCK_OIDC_CLIENT_SECRET", "ztlab-secret")
 
+_jwk_key = os.environ.get("MOCK_OIDC_SIGNING_KEY", "zerotrustlab-mock-secret-key-32!")
 JWK = {
     "kty": "oct",
     "alg": "HS256",
-    "k": base64.urlsafe_b64encode(b"zerotrustlab-mock-secret-key-32!").decode(),
+    "k": base64.urlsafe_b64encode(_jwk_key.encode()).decode(),
 }
 
 CONFIG = {

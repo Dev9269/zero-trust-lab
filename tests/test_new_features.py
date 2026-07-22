@@ -83,9 +83,13 @@ class TestAdminDashboard:
 
 
 class TestPeerProvisioningAPI:
+    @pytest.fixture(autouse=True)
+    def _setup(self, authz_bridge_module):
+        authz_bridge_module.app.config["TESTING"] = True
+        authz_bridge_module.ADMIN_TOKEN = "ztlab-admin-token"
+
     @pytest.fixture
     def client(self, authz_bridge_module):
-        authz_bridge_module.app.config["TESTING"] = True
         return authz_bridge_module.app.test_client()
 
     def _auth_headers(self, token="ztlab-admin-token"):

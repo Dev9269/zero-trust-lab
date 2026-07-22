@@ -79,6 +79,9 @@ services:
 
   mock-oidc:
     build: ./mock-oidc
+    environment:
+      MOCK_OIDC_CLIENT_SECRET: "${MOCK_OIDC_CLIENT_SECRET:-ztlab-secret}"
+      MOCK_OIDC_SIGNING_KEY: "${MOCK_OIDC_SIGNING_KEY:-zerotrustlab-mock-secret-key-32!}"
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:9000/.well-known/openid-configuration')"]
       interval: 10s
