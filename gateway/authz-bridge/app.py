@@ -238,8 +238,16 @@ def validate() -> Response:
         reason,
     )
 
+    clearance_header = f"clearance={identity.get('role', 'user')}"
+
     if allowed:
-        return Response(status=200, headers={"X-ZTLab-Reason": reason})
+        return Response(
+            status=200,
+            headers={
+                "X-ZTLab-Reason": reason,
+                "X-ZTLab-Clearance": clearance_header,
+            },
+        )
     if not identity.get("authenticated", False):
         return Response(
             status=401,

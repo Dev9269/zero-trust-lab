@@ -15,7 +15,7 @@ even though the PEP handles access decisions.
 import logging
 import time
 
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, abort
 
 app = Flask(__name__)
 
@@ -158,6 +158,41 @@ def _get_classification_for_path(path: str) -> dict:
     }
 
 
+# Clearance levels used for data access enforcement.
+# Set by authz-bridge via the X-ZTLab-Clearance header, stripped by nginx
+# of any client-supplied value so it cannot be spoofed.
+CLEARANCE_LEVELS = {
+    "admin": 3,
+    "devops": 2,
+    "user": 1,
+    "anonymous": 0,
+}
+
+CLASSIFICATION_LEVELS = {
+    "RESTRICTED": 3,
+    "CONFIDENTIAL": 2,
+    "INTERNAL": 1,
+    "PUBLIC": 0,
+    "UNCLASSIFIED": 0,
+}
+
+
+def _get_caller_clearance() -> int:
+    """Parse caller clearance from the trusted X-ZTLab-Clearance header."""
+    header = request.headers.get("X-ZTLab-Clearance", "")
+    if header.startswith("clearance="):
+        role = header[len("clearance="):].strip()
+        return CLEARANCE_LEVELS.get(role, 0)
+    return 0
+
+
+def _clearance_sufficient(object_classification: str) -> bool:
+    """Check if caller's clearance meets the object's classification level."""
+    caller = _get_caller_clearance()
+    required = CLASSIFICATION_LEVELS.get(object_classification.upper(), 0)
+    return caller >= required
+
+
 def _classification_color(classification: str) -> str:
     return {
         "PUBLIC": "#3ddc97",
@@ -237,14 +272,12 @@ def sensitive():
 
 @app.route("/api/data")
 def api_data():
-    """API endpoint returning classified data objects with labels.
-    RESTRICTED objects are excluded — they require admin clearance.
-    """
+    """API endpoint returning classified data objects filtered by caller clearance."""
     classification = _get_classification_for_path("/api/data")
     filtered = {
         obj_id: obj
         for obj_id, obj in DATA_OBJECTS.items()
-        if obj.get("classification") != "RESTRICTED"
+        if _clearance_sufficient(obj.get("classification", "PUBLIC"))
     }
     return jsonify(
         {
@@ -258,10 +291,12 @@ def api_data():
 
 @app.route("/api/data/<object_id>")
 def api_data_object(object_id):
-    """Return a single data object with its classification metadata."""
+    """Return a single data object if caller's clearance is sufficient."""
     obj = DATA_OBJECTS.get(object_id)
-    if not obj or obj.get("classification") == "RESTRICTED":
+    if not obj:
         return jsonify({"error": "object not found"}), 404
+    if not _clearance_sufficient(obj.get("classification", "PUBLIC")):
+        return jsonify({"error": "insufficient clearance"}), 403
     classification = _get_classification_for_path("/api/data")
     return jsonify(
         {
