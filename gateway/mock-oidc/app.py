@@ -27,13 +27,25 @@ CONFIG = {
     "id_token_signing_alg_values_supported": ["HS256"],
 }
 
-USERINFO = {
-    "sub": "user-ztlab-001",
-    "name": "Alice Zero-Trust",
-    "preferred_username": "alice",
-    "email": "alice@zerotrust.lab",
-    "groups": ["engineers", "admins"],
+USERINFO_STORE = {
+    "admin": {
+        "sub": "user-ztlab-001",
+        "name": "Alice Zero-Trust",
+        "preferred_username": "alice",
+        "email": "alice@zerotrust.lab",
+        "groups": ["engineers", "admins"],
+    },
+    "non-admin": {
+        "sub": "user-ztlab-002",
+        "name": "Bob No-Admin",
+        "preferred_username": "bob",
+        "email": "bob@zerotrust.lab",
+        "groups": ["engineers"],
+    },
 }
+
+USERINFO = USERINFO_STORE["admin"]
+USERINFO_NON_ADMIN = USERINFO_STORE["non-admin"]
 
 
 def b64_encode(data: dict) -> str:
@@ -69,14 +81,17 @@ def token():
     if grant_type != "authorization_code":
         return jsonify({"error": "unsupported_grant_type"}), 400
 
-    access_token = make_jwt({"sub": USERINFO["sub"], "scope": "openid profile email"})
+    user_type = request.form.get("user", "admin")
+    userinfo = USERINFO_STORE.get(user_type, USERINFO_STORE["admin"])
+
+    access_token = make_jwt({"sub": userinfo["sub"], "scope": "openid profile email"})
     id_token = make_jwt(
         {
-            "sub": USERINFO["sub"],
-            "name": USERINFO["name"],
-            "preferred_username": USERINFO["preferred_username"],
-            "email": USERINFO["email"],
-            "groups": USERINFO["groups"],
+            "sub": userinfo["sub"],
+            "name": userinfo["name"],
+            "preferred_username": userinfo["preferred_username"],
+            "email": userinfo["email"],
+            "groups": userinfo["groups"],
         }
     )
 
@@ -95,7 +110,25 @@ def userinfo():
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
         return jsonify({"error": "invalid_token"}), 401
-    return jsonify(USERINFO)
+
+    token = auth[len("Bearer "):]
+    parts = token.split(".")
+    if len(parts) != 3:
+        return jsonify({"error": "invalid_token"}), 401
+
+    try:
+        payload_b64 = parts[1]
+        padded = payload_b64 + "=" * ((4 - len(payload_b64) % 4) % 4)
+        decoded = json.loads(base64.urlsafe_b64decode(padded))
+        sub = decoded.get("sub", "")
+    except (ValueError, json.JSONDecodeError):
+        return jsonify({"error": "invalid_token"}), 401
+
+    for u in USERINFO_STORE.values():
+        if u["sub"] == sub:
+            return jsonify(u)
+
+    return jsonify(USERINFO_STORE["admin"])
 
 
 if __name__ == "__main__":

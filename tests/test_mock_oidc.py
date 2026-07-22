@@ -156,3 +156,45 @@ class TestUserInfo:
         )
 
         assert resp.status_code == 401
+
+    def test_non_admin_token_has_no_admins_group(self, mock_oidc_client):
+        client, _ = mock_oidc_client
+        data = client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "user": "non-admin",
+            },
+        ).get_json()
+
+        parts = data["id_token"].split(".")
+        payload_b64 = parts[1]
+        padded = payload_b64 + "=" * ((4 - len(payload_b64) % 4) % 4)
+        payload = json.loads(base64.urlsafe_b64decode(padded))
+
+        assert "groups" in payload
+        assert "admins" not in payload["groups"]
+        assert "engineers" in payload["groups"]
+        assert payload["preferred_username"] == "bob"
+
+    def test_non_admin_userinfo_returns_bob(self, mock_oidc_client):
+        client, _ = mock_oidc_client
+        token_data = client.post(
+            "/oauth/token",
+            data={
+                "grant_type": "authorization_code",
+                "user": "non-admin",
+            },
+        ).get_json()
+
+        resp = client.get(
+            "/userinfo",
+            headers={
+                "Authorization": f"Bearer {token_data['access_token']}",
+            },
+        )
+
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["preferred_username"] == "bob"
+        assert "admins" not in data.get("groups", [])
