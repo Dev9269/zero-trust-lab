@@ -1,3 +1,8 @@
+[![CI](https://github.com/Dev9269/zero-trust-lab/actions/workflows/ci.yml/badge.svg)](https://github.com/Dev9269/zero-trust-lab/actions/workflows/ci.yml)
+[![OPA tests](https://img.shields.io/badge/OPA-10%20tests%20passing-7C5C3E?logo=openpolicyagent)](https://github.com/Dev9269/zero-trust-lab/tree/main/gateway/opa)
+[![Python tests](https://img.shields.io/badge/Python-96%20tests%20passing-3776AB?logo=python)](https://github.com/Dev9269/zero-trust-lab/actions/workflows/ci.yml)
+[![CISA ZTMM](https://img.shields.io/badge/CISA%20ZTMM-Advanced-3ddc97)](phase8-maturity-scorecard.md)
+
 # ZTLab — Zero Trust Lab
 
 A self-hosted, from-scratch zero-trust access control system running on 4 KVM/libvirt Debian 12 VMs. Built as a learning/portfolio project against the CISA Zero Trust Maturity Model v2.0.
