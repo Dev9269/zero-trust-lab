@@ -131,7 +131,7 @@ class TestPeerProvisioningAPI:
             resp = client.post(
                 "/api/peers",
                 json={
-                    "public_key": "A" * 44,
+                    "public_key": "A" * 43 + "=",
                     "device_name": "test-device",
                     "email": "test@test.com",
                 },
@@ -175,7 +175,7 @@ class TestPeerProvisioningAPI:
             resp = client.post(
                 "/api/peers",
                 json={
-                    "public_key": "A" * 44,
+                    "public_key": "A" * 43 + "=",
                     "device_name": "laptop-admin",
                     "email": "admin@test.com",
                 },
@@ -192,7 +192,7 @@ class TestPeerProvisioningAPI:
         resp = client.post(
             "/api/peers",
             json={
-                "public_key": "A" * 44,
+                "public_key": "A" * 43 + "=",
                 "device_name": "test-device",
                 "email": "test@test.com",
             },
@@ -228,7 +228,7 @@ class TestPeerProvisioningAPI:
             resp = client.post(
                 "/api/peers",
                 json={
-                    "public_key": "A" * 44,
+                    "public_key": "A" * 43 + "=",
                     "device_name": "laptop-alice",
                     "email": "alice@test.com",
                 },

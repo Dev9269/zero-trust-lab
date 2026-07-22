@@ -26,6 +26,7 @@ import ipaddress
 import json
 import logging
 import os
+import re
 import subprocess
 import time
 from typing import Any
@@ -375,6 +376,9 @@ def add_peer() -> Response:
 
     if not pubkey or len(pubkey) < 20:
         return jsonify({"error": "invalid public_key"}), 400
+
+    if not re.match(r"^[A-Za-z0-9+/]{43}=$", pubkey):
+        return jsonify({"error": "invalid public_key format"}), 400
 
     if fixed_ip:
         try:
