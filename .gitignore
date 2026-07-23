@@ -11,3 +11,12 @@ gateway/certs/*.key
 gateway/posture-data/*.json
 gateway/nginx/certs/
 gateway/authz-bridge/data/
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.log
+/qa-screenshots/
