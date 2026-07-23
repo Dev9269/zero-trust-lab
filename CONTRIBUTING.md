@@ -28,6 +28,12 @@ Thank you for your interest in contributing to the Zero-Trust Lab!
 - Write tests for new functionality.
 - Update or add checkpoint docs if the lab topology changes.
 
+## Security
+
+- If you discover a vulnerability, **do not open a public issue**. Email the maintainer or use GitHub's private vulnerability reporting.
+- Never commit secrets, tokens, or credentials.
+- Run `scripts/ssh_audit.py` before opening a PR that touches SSH/WireGuard configs.
+
 ## Pull Request Process
 
 - Ensure CI passes (tests + lint).
