@@ -1,0 +1,12 @@
+# Default owners
+* @Dev9269
+
+# Gateway stack config
+/gateway/ @Dev9269
+
+# OPA policies
+/gateway/opa/ @Dev9269
+
+# Security docs
+SECURITY.md @Dev9269
+phase*.md @Dev9269
