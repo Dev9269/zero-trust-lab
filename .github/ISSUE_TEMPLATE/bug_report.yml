@@ -1,0 +1,26 @@
+name: Bug Report
+description: File a bug report
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: "## Bug Report"
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What happened?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction Steps
+      description: How can we reproduce this?
+      placeholder: "1. ... 2. ... 3. ..."
+  - type: input
+    id: component
+    attributes:
+      label: Component
+      description: Which part of the stack?
+      placeholder: "nginx / OPA / authz-bridge / docs"
