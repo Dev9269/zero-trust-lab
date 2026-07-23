@@ -36,6 +36,12 @@ prod-down: ## Stop production stack
 prod-logs: ## Tail production stack logs
 	cd gateway && docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f
 
+dev-up: ## Start with OPA/Loki ports exposed for development
+	cd gateway && docker compose -f docker-compose.yml -f docker-compose.override.yml up -d
+
+dev-down: ## Stop dev stack
+	cd gateway && docker compose -f docker-compose.yml -f docker-compose.override.yml down
+
 dashboard: ## Open admin dashboard in browser (requires gateway up)
 	@echo "Admin dashboard: http://localhost/admin"
 	@echo "Grafana:          http://localhost:3000 (admin/ztlab-grafana)"
