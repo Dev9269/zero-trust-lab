@@ -2,6 +2,8 @@
 [![OPA tests](https://img.shields.io/badge/OPA-10%20tests%20passing-7C5C3E?logo=openpolicyagent)](https://github.com/Dev9269/zero-trust-lab/tree/main/gateway/opa)
 [![Python tests](https://img.shields.io/badge/Python-96%20tests%20passing-3776AB?logo=python)](https://github.com/Dev9269/zero-trust-lab/actions/workflows/ci.yml)
 [![CISA ZTMM](https://img.shields.io/badge/CISA%20ZTMM-Advanced-3ddc97)](phase8-maturity-scorecard.md)
+[![PRs](https://img.shields.io/badge/PRs%20merged-65%2B-6a11cb)](https://github.com/Dev9269/zero-trust-lab/pulls?q=is%3Apr+is%3Amerged)
+[![Co-authored](https://img.shields.io/badge/Co--authored%20PRs-11-00ff41)](https://github.com/Dev9269/zero-trust-lab/graphs/contributors)
 
 # ZTLab — Zero Trust Lab
 
