@@ -181,7 +181,7 @@ def _get_caller_clearance() -> int:
     """Parse caller clearance from the trusted X-ZTLab-Clearance header."""
     header = request.headers.get("X-ZTLab-Clearance", "")
     if header.startswith("clearance="):
-        role = header[len("clearance="):].strip()
+        role = header[len("clearance=") :].strip()
         return CLEARANCE_LEVELS.get(role, 0)
     return 0
 
@@ -206,6 +206,14 @@ def _classification_color(classification: str) -> str:
 @app.before_request
 def _start_timer():
     request._start_time = time.monotonic()
+
+
+@app.after_request
+def _set_security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    return response
 
 
 @app.after_request

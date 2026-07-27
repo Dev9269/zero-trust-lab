@@ -98,7 +98,11 @@ def get_posture(source_ip: str) -> dict[str, Any]:
         return {"posture": "unhealthy", "reason": "invalid posture signature"}
     posture_age = time.time() - data.get("checked_at", 0)
     if posture_age > MAX_POSTURE_AGE_SECONDS:
-        log.warning("posture stale for %s (%ds old) — failing closed", source_ip, int(posture_age))
+        log.warning(
+            "posture stale for %s (%ds old) — failing closed",
+            source_ip,
+            int(posture_age),
+        )
         return {"posture": "unhealthy", "reason": "stale posture data"}
     return data
 
@@ -169,6 +173,17 @@ def check_identity(incoming_headers: Any) -> dict[str, Any]:
     }
 
 
+@app.after_request
+def _set_security_headers(response):
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
+    )
+    return response
+
+
 @app.route("/validate", methods=["GET"])
 def validate() -> Response:
     original_uri: str = request.headers.get("X-Original-URI", "/")
@@ -216,11 +231,17 @@ def validate() -> Response:
     allowed: bool = False
     reason: str = "denied: policy engine unreachable"
 
-    opa_headers = {"Authorization": f"Bearer {OPA_AUTH_TOKEN}"} if OPA_AUTH_TOKEN else {}
+    opa_headers = (
+        {"Authorization": f"Bearer {OPA_AUTH_TOKEN}"} if OPA_AUTH_TOKEN else {}
+    )
 
     try:
-        opa_resp = requests.post(f"{OPA_URL}/allow", json=opa_input, headers=opa_headers, timeout=3)
-        opa_reason_resp = requests.post(f"{OPA_URL}/reason", json=opa_input, headers=opa_headers, timeout=3)
+        opa_resp = requests.post(
+            f"{OPA_URL}/allow", json=opa_input, headers=opa_headers, timeout=3
+        )
+        opa_reason_resp = requests.post(
+            f"{OPA_URL}/reason", json=opa_input, headers=opa_headers, timeout=3
+        )
         allowed = opa_resp.json().get("result", False)
         reason = opa_reason_resp.json().get("result", "unknown")
     except requests.RequestException as e:
