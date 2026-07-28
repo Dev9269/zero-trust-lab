@@ -4,6 +4,9 @@
 [![CISA ZTMM](https://img.shields.io/badge/CISA%20ZTMM-Advanced-3ddc97)](phase8-maturity-scorecard.md)
 [![PRs](https://img.shields.io/badge/PRs%20merged-65%2B-6a11cb)](https://github.com/Dev9269/zero-trust-lab/pulls?q=is%3Apr+is%3Amerged)
 [![Co-authored](https://img.shields.io/badge/Co--authored%20PRs-11-00ff41)](https://github.com/Dev9269/zero-trust-lab/graphs/contributors)
+[![Last Commit](https://img.shields.io/github/last-commit/Dev9269/zero-trust-lab?style=flat&color=blueviolet)](https://github.com/Dev9269/zero-trust-lab/commits/main)
+[![License](https://img.shields.io/github/license/Dev9269/zero-trust-lab?style=flat&color=brightgreen)](LICENSE)
+[![Sponsor](https://img.shields.io/badge/Sponsor-Dev9269-ea4aaa?style=flat&logo=githubsponsors)](https://github.com/sponsors/Dev9269)
 
 # ZTLab — Zero Trust Lab
 
@@ -50,6 +53,8 @@ A self-hosted, from-scratch zero-trust access control system running on 4 KVM/li
 ```
 
 **Logical flow:** client → nginx:443 → auth_request → authz-bridge → oauth2-proxy (session check) + OPA (Rego policy: MFA + posture + auth_time) → if allow → proxy to Flask app.
+
+> The ASCII diagram above shows the logical topology. For a detailed breakdown of each component, see the [phase checkpoints](#phase-map) and the [gateway service definitions](gateway/docker-compose.yml).
 
 ## VM Specs
 
