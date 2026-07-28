@@ -1,0 +1,18 @@
+services:
+  envoy:
+    ports:
+      - "9901:9901"
+
+  opa:
+    ports:
+      - "8181:8181"
+
+  mock-oidc:
+    ports:
+      - "9000:9000"
+
+  authz-bridge:
+    environment:
+      - LOG_LEVEL=debug
+    volumes:
+      - ./gateway/authz-bridge:/app
