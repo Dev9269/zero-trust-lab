@@ -1,36 +1,45 @@
 # Security Policy
 
-## Supported Versions
-
-| Version | Supported          |
-| ------- | ------------------ |
-| latest  | :white_check_mark: |
-
 ## Reporting a Vulnerability
 
-This project is a **lab environment** intended for learning and experimentation.
-If you discover a security vulnerability, please **do not open a public issue**.
+If you discover a security vulnerability in **Zero Trust Lab**, **do not** open a public GitHub issue. Report it privately.
 
-Instead, disclose responsibly by emailing the maintainer at the address listed
-on the repository profile. You should receive an acknowledgment within 72 hours.
+**Report via GitHub Security Advisory:**
+1. Go to the repository's **Security** tab
+2. Click **Report a vulnerability** (or use `https://github.com/Dev9269/zero-trust-lab/security/advisories/new`)
+3. Fill in the details
 
-### What to include
+**Or email directly:**
+[jainammaru567000@gmail.com](mailto:jainammaru567000@gmail.com)
+GPG fingerprint: `00D6CCEA36D10407`
 
-- A description of the vulnerability.
-- Steps to reproduce (PoC or minimal setup).
-- Affected components and versions.
-- Any proposed fix (optional).
+### Please include:
+- Type of vulnerability
+- Steps to reproduce (PoC preferred)
+- Affected versions
+- Potential impact
+- Any suggested fix (optional)
 
-We will coordinate a fix and release before public disclosure.
+## Response Timeline
 
-## SSH Key Rotation Policy
+| Step | Timeframe |
+|------|-----------|
+| Acknowledgment | Within 48 hours |
+| Initial assessment | Within 5 business days |
+| Fix timeline | Communicated based on severity |
+| Coordinated disclosure | 90 days after fix shipped |
 
-Maintainers using the `deploy.yml` GitHub Actions workflow:
-1. Generate a new ed25519 key pair: `ssh-keygen -t ed25519 -f deploy-key -C "github-actions-deploy"`
-2. Add the public key to the target server's `~/.ssh/authorized_keys`
-3. Update the `DEPLOY_SSH_KEY` repository secret with the **private** key
-4. Revoke the old key from the server's `authorized_keys`
-5. Rotate at least every **90 days**, or immediately after any team member with access departs
+## Supported Versions
 
-This project does not rotate SSH keys automatically. Use GitHub's secret scanning
-alerts to detect leaked keys — enable it in repo Settings > Security > Secret scanning.
+| Version | Supported |
+|---------|-----------|
+| latest  | ✅ |
+| older   | ❌ |
+
+## Scope
+
+This policy covers the gateway, authorization bridge, SSH setup, and deployment configurations in this repository. This is a lab/learning environment — do not deploy untrusted configurations to production.
+
+## Coordinated Disclosure
+
+We follow coordinated disclosure. Please allow us reasonable time to fix the issue before any public disclosure. We will credit reporters in release notes (with permission).
