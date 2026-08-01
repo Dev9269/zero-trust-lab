@@ -10,11 +10,65 @@
 
 # ZTLab — Zero Trust Lab
 
-A self-hosted, from-scratch zero-trust access control system running on 4 KVM/libvirt Debian 12 VMs. Built as a learning/portfolio project against the CISA Zero Trust Maturity Model v2.0.
+A self-hosted, from-scratch **zero-trust access control system** running on 4 KVM/libvirt Debian 12 VMs. Built as a learning/portfolio project against the **CISA Zero Trust Maturity Model v2.0** — complete with an attack-simulation phase and a maturity scorecard.
 
-**Architecture correction:** Uses nginx + oauth2-proxy + authz-bridge + OPA (not Pomerium — Pomerium Community doesn't support custom Rego policies, that's Enterprise-only). This is a fully open-source, properly separated PEP/PDP stack.
+> **Architecture correction:** Uses nginx + oauth2-proxy + authz-bridge + OPA (not Pomerium — Pomerium Community doesn't support custom Rego policies, that's Enterprise-only). This is a fully open-source, properly separated PEP/PDP stack.
 
-## Architecture
+---
+
+## 🎓 What You'll Learn
+
+This lab is structured as **9 progressive checkpoints (Phase 0 → 8)**. Each phase ships with a detailed checkpoint document containing pre-reqs, failure modes, rollback steps, and a definition-of-done checklist. Complete one phase before starting the next.
+
+| Phase | Topic | You'll Build |
+|-------|-------|-------------|
+| 0 | Lab environment | Isolated trusted/untrusted KVM networks |
+| 1 | Identity | Authentik OIDC IdP with WebAuthn MFA |
+| 2 | Device posture | osquery-based posture checking + HMAC signing |
+| 3 | Network segmentation | WireGuard tunnel + nftables egress rules |
+| 4 | PEP + PDP | nginx `auth_request` + oauth2-proxy + OPA Rego policies |
+| 5 | Protected app | Flask demo app (public vs. sensitive routes) |
+| 6 | Visibility | Centralized logging + posture-based revocation |
+| 7 | Attack simulation | 4 bypass attempts from a hostile VM |
+| 8 | Maturity self-assessment | CISA ZTMM 2.0 scorecard |
+
+By the end you will have **implemented** — not just read about — the three pillars of zero trust: *identity, device posture, and continuous authorization*.
+
+## 🔐 How a Request Gets Authorized
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor U as User (with MFA)
+    participant N as nginx :443 (PEP transport)
+    participant AB as authz-bridge (PEP logic)
+    participant OP as oauth2-proxy (AuthN)
+    participant IDP as Authentik IdP (MFA)
+    participant OPA as OPA (PDP · Rego)
+    participant APP as Flask App
+
+    U->>N: HTTPS request to /sensitive
+    N->>AB: auth_request (subrequest)
+    AB->>OP: Validate session cookie
+    OP->>IDP: OIDC session / re-auth
+    IDP-->>OP: Authenticated + MFA verified
+    OP-->>AB: identity claims (auth_time)
+    AB->>AB: Fetch device posture
+    AB->>OPA: input {identity, posture, resource, auth_time}
+    OPA-->>AB: allow / deny (Rego decision)
+    alt allow
+        AB-->>N: 200 OK + X-ZT headers
+        N->>APP: Proxy to Flask /sensitive
+        APP-->>U: Protected content
+    else deny
+        AB-->>N: 403 Forbidden
+        N-->>U: Access denied
+    end
+```
+
+**Every access decision combines three signals:** *who you are* (OIDC + MFA), *what your device says* (signed posture), and *how recently you authenticated* (auth_time step-up policy) — evaluated by OPA on every request, not just at login.
+
+## 🏗️ Architecture
 
 ```
                           untrusted-net (10.10.2.0/24)
@@ -52,11 +106,9 @@ A self-hosted, from-scratch zero-trust access control system running on 4 KVM/li
 
 ```
 
-**Logical flow:** client → nginx:443 → auth_request → authz-bridge → oauth2-proxy (session check) + OPA (Rego policy: MFA + posture + auth_time) → if allow → proxy to Flask app.
-
 > The ASCII diagram above shows the logical topology. For a detailed breakdown of each component, see the [phase checkpoints](#phase-map) and the [gateway service definitions](gateway/docker-compose.yml).
 
-## VM Specs
+## 🖥️ VM Specs
 
 | VM | IP | Role | RAM | Disk |
 |----|----|------|-----|------|
@@ -65,7 +117,7 @@ A self-hosted, from-scratch zero-trust access control system running on 4 KVM/li
 | app | 10.10.1.20 | Protected Flask demo app | 2 GB | 20 GB |
 | attacker | 10.10.2.10 | Untrusted client for attack tests | 2 GB | 20 GB |
 
-## Quick Start
+## 🚀 Quick Start
 
 ```bash
 # 1. Define networks
@@ -90,7 +142,7 @@ sudo bash scripts/create-vms.sh
 
 Each phase has a detailed checkpoint document with pre-reqs, failure modes, rollback, and definition-of-done checklist. Do not proceed to the next phase until the current one's checklist is complete.
 
-## Phase Map
+## 🗺️ Phase Map
 
 | Phase | Topic | Key File(s) |
 |-------|-------|-------------|
@@ -104,13 +156,13 @@ Each phase has a detailed checkpoint document with pre-reqs, failure modes, roll
 | 7 | Attack simulation | `phase7-attack-simulation.md` |
 | 8 | Maturity self-assessment | `phase8-maturity-scorecard.md` |
 
-## Key Architecture Decisions
+## 🧠 Key Architecture Decisions
 
 - **Why nginx + oauth2-proxy + authz-bridge instead of Pomerium?** Pomerium Community doesn't support custom Rego policies — that's Enterprise-only. The nginx `auth_request` pattern with a separate authz-bridge service gives us a real, decoupled PDP/PEP separation using only free software.
 - **Why a shared JSON file for posture data?** Lab simplicity. The pattern (PEP reads posture at request time and includes it in OPA input) is architecture-identical to a production Redis-backed approach.
 - **Why Flask instead of FastAPI?** Simpler for a two-route demo with inline templates. The app is intentionally dumb — it has no auth logic, trusting the upstream PEP.
 
-## Lab Shortcuts (Not Production-Ready)
+## ⚠️ Lab Shortcuts (Not Production-Ready)
 
 - **Posture signing uses a shared symmetric key** — the HMAC secret is the same for all devices. A per-device key pair (asymmetric) would be production-grade. The current fix closes the "anyone can write posture.json" gap but a key compromise breaks all devices.
 - **Posture store is still a JSON file** — not a database. No query isolation, no atomic writes, no access audit. The HMAC signing prevents forgery but doesn't fix structural weaknesses.
@@ -124,7 +176,7 @@ Each phase has a detailed checkpoint document with pre-reqs, failure modes, roll
 - **No SPIFFE/SPIRE workload identity** — services authenticate each other by network presence, not cryptographic identity. Production would run a SPIRE server with per-service agent attestors and short-lived X.509 SVIDs.
 - **No rate limiting or input validation on Flask** — the demo app trusts the upstream PEP, but a misconfigured nginx could allow direct requests. Production would add rate limiting at the nginx layer and input validation on every route.
 
-## Testing
+## 🧪 Testing
 
 ### Python unit tests
 
@@ -156,7 +208,7 @@ flake8 .
 make test lint
 ```
 
-## Makefile
+## 🛠️ Makefile
 
 Common tasks are available via `make`:
 
@@ -170,7 +222,7 @@ Common tasks are available via `make`:
 | `make logs` | Tail gateway stack logs |
 | `make clean` | Remove caches |
 
-## Deployment
+## 🚢 Deployment
 
 ### Docker images (GHCR)
 
@@ -203,3 +255,7 @@ The workflow clones/pulls the repo to `/opt/ztlab` and runs `docker compose up -
 ### GitHub Pages
 
 Documentation is auto-deployed to GitHub Pages on every push to `main`. Enable it in repo Settings > Pages > Source: GitHub Actions.
+
+## 🏷️ Topics & Tags
+
+`zero-trust` · `security` · `iam` · `oauth2-proxy` · `opentext-policy` · `opa` · `identity-management` · `cybersecurity` · `wireguard` · `network-security`
